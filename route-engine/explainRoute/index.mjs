@@ -17,15 +17,23 @@ const reply = (statusCode, body) => ({
   body: JSON.stringify(body),
 });
 
+// Profile-specific reason used in the fallback sentence
+const PROFILE_REASON = {
+  asthma:  "Cleaner air lowers the risk of breathing trouble.",
+  elderly: "Cleaner air and calmer streets are easier on the lungs and heart.",
+  child:   "Children breathe faster, so less traffic exhaust matters more.",
+  general: "It reduces your pollution exposure for a small time cost.",
+};
+
 // Template sentence used when Bedrock fails, so the app never breaks
 function fallbackText(fastest, clean, profile) {
   const extraMin = Math.max(0, clean.durationMin - fastest.durationMin);
   const drop = fastest.avgAqi > 0
     ? Math.round(((fastest.avgAqi - clean.avgAqi) / fastest.avgAqi) * 100)
     : 0;
+  const why = PROFILE_REASON[profile] || "It reduces your pollution exposure.";
   return `This route takes ${extraMin} min longer but has ${drop}% lower AQI ` +
-         `(${clean.avgAqi} vs ${fastest.avgAqi}) with ${String(clean.traffic).toLowerCase()} traffic, ` +
-         `which is better for the ${profile} profile.`;
+         `(${clean.avgAqi} vs ${fastest.avgAqi}) with ${String(clean.traffic).toLowerCase()} traffic. ${why}`;
 }
 
 export const handler = async (event) => {

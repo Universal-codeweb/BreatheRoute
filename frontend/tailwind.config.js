@@ -78,6 +78,11 @@ export default {
         "margin-desktop": "2.5rem",
       },
       fontFamily: {
+        "editorial": ["Newsreader", "Georgia", "serif"],
+        "ui": ["'Plus Jakarta Sans'", "Manrope", "sans-serif"],
+        "sans-refined": ["'Plus Jakarta Sans'", "sans-serif"],
+        "space-grotesk": ["'Space Grotesk'", "sans-serif"],
+        "space": ["'Space Grotesk'", "sans-serif"],
         "body-sm": ["Manrope", "sans-serif"],
         "data-badge": ["'JetBrains Mono'", "monospace"],
         "body-lg": ["Manrope", "sans-serif"],

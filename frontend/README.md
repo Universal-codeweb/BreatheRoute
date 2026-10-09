@@ -30,7 +30,7 @@ BreatheRoute is a React-based single-page application that reimagines urban navi
 - **Traffic congestion and diesel idling zones**
 - **Shade and shelter percentages**
 
-The application targets the **Tiruchengode / KSRCT Campus** region in Tamil Nadu, India, with real sensor deployments providing live atmospheric telemetry.
+The application targets urban corridors with real IoT sensor deployments providing live atmospheric telemetry.
 
 ---
 
