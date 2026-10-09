@@ -251,7 +251,9 @@ export default function App() {
               selectedRouteId={selectedRouteId}
               setSelectedRouteId={setSelectedRouteId}
               origin={origin}
+              setOrigin={setOrigin}
               destination={destination}
+              setDestination={setDestination}
               loading={loading}
               error={error}
               onFindRoutes={findRoutes}
@@ -269,6 +271,8 @@ export default function App() {
               origin={origin}
               destination={destination}
               profile={profile}
+              loading={loading}
+              error={error}
               onBackToMap={handleExploreMap}
               onSelectRoute={handleSelectRouteAndGo}
             />

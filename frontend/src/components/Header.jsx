@@ -59,12 +59,13 @@ export default function Header({ activeTab, setActiveTab }) {
   const [avgAqi, setAvgAqi] = useState(null);
 
   // Prefers-reduced-motion
-  const [reducedMotion, setReducedMotion] = useState(false);
+  const [reducedMotion, setReducedMotion] = useState(
+    () => typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  );
 
   // Detect reduced-motion preference
   useEffect(() => {
     const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
-    setReducedMotion(mq.matches);
     const listener = (e) => setReducedMotion(e.matches);
     mq.addEventListener('change', listener);
     return () => mq.removeEventListener('change', listener);
@@ -182,38 +183,58 @@ export default function Header({ activeTab, setActiveTab }) {
 
   return (
     <header
-      className={`sticky top-0 z-50 w-full h-16 transition-[background-color,backdrop-filter,border-color,box-shadow] ${reducedMotion ? '' : 'duration-200 ease-out'
-        } ${isScrolled
-          ? 'bg-surface/80 backdrop-blur-md border-b border-surface-container shadow-sm'
-          : 'bg-transparent border-b border-transparent shadow-none'
-        }`}
+      className={`sticky top-0 z-50 w-full transition-all duration-300 py-2.5 px-margin md:px-margin-tablet lg:px-margin-desktop border-b border-outline-variant/30 ${
+        isScrolled
+          ? 'backdrop-blur-xl bg-surface-container-lowest/95 shadow-md'
+          : 'backdrop-blur-md bg-surface-container-lowest/85 shadow-sm'
+      }`}
     >
-      <div className="max-w-7xl mx-auto h-full px-margin md:px-margin-tablet lg:px-margin-desktop flex items-center justify-between gap-space-md">
+      <div className="max-w-7xl mx-auto flex items-center justify-between gap-space-md h-14 px-space-md rounded-2xl bg-surface-container-lowest/95 backdrop-blur-md shadow-[0_1px_8px_rgba(15,61,42,0.06)] border border-[#a7f3d0]/30">
 
-        {/* Left: Brand Logo & Title */}
-        <button
-          onClick={() => handleNavClick('landing')}
-          className="flex items-center gap-2.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-xl p-1 -ml-1 group flex-shrink-0 cursor-pointer"
-          aria-label="BreatheRoute home"
-        >
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-primary to-secondary flex items-center justify-center text-white shadow-sm group-hover:scale-105 transition-transform">
-            <span className="material-symbols-outlined text-[20px]">air</span>
-          </div>
-          <span className="font-headline-sm text-headline-sm text-primary tracking-tight font-bold">
-            BreatheRoute
-          </span>
-        </button>
+        {/* Left: Brand Logo & Title with Stitch official mark */}
+        <div className="flex items-center gap-space-lg flex-shrink-0">
+          <button
+            onClick={() => handleNavClick('landing')}
+            className="flex items-center gap-space-sm text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-secondary rounded-xl p-1 -ml-1 group flex-shrink-0 cursor-pointer"
+            aria-label="BreatheRoute home"
+          >
+            <img
+              alt="BreatheRoute Logo"
+              className="h-8 w-8 object-contain rounded-lg shadow-sm group-hover:scale-105 transition-transform"
+              src="https://lh3.googleusercontent.com/aida-public/AB6AXuBspYAOaDLHofmuwl_UkxFLbBYtDNjNf5X9ysEnCk9fM_RFMrA-iBfE1_ICpdfEUH5xOOk_guGth_qC_mbfZA_9eSFijaLhpr4MezX_uYR7hiaSGiAztB1l0XuupqVFIWNpPHVhst0zNVGGaN8yt0yZ4gre2UvN3OLVKkb4d-4h2SF_r9aDgcCUeDECb2T6FwlCRQsSR5rR5iEkz7ik8-szo7j8PmG0l5rq5AbSSKcSVK1bSaE41M3yqpJjCNEZePu1Cw"
+            />
+            <span
+              className="text-[20px] text-primary tracking-[-0.03em] font-bold select-none leading-none"
+              style={{ fontFamily: '"Plus Jakarta Sans", sans-serif' }}
+            >
+              Breathe<span className="text-secondary font-semibold italic">Route</span>
+            </span>
+          </button>
+
+          {/* Stitch Live Sensor Telemetry Badge */}
+          {avgAqi !== null && (
+            <div className="hidden xl:flex items-center gap-space-xs px-space-sm py-1 bg-[#ecfdf5] rounded-full border border-[#a7f3d0]">
+              <span className="w-2 h-2 rounded-full bg-secondary animate-pulse" />
+              <span className="font-data-badge text-[11px] text-[#166534] uppercase tracking-wider font-semibold">
+                Live Sensor Grid:
+              </span>
+              <span className="font-data-badge text-[11px] font-bold text-[#15803d]">
+                AQI {avgAqi} {avgAqi <= 50 ? 'Pristine' : avgAqi <= 100 ? 'Moderate' : 'Poor'}
+              </span>
+            </div>
+          )}
+        </div>
 
         {/* Center: Desktop Navigation with Craft-style Sliding Pill */}
         <nav
           ref={navContainerRef}
           onMouseLeave={() => setHoveredTab(null)}
           aria-label="Main navigation"
-          className="hidden lg:flex relative items-center p-1 bg-surface-container-low/70 rounded-full border border-surface-container/80 backdrop-blur-sm"
+          className="hidden lg:flex relative items-center p-1 bg-surface-container-low/90 rounded-xl border border-outline-variant/30 backdrop-blur-sm"
         >
           {/* Sliding Pill Indicator */}
           <div
-            className="absolute top-1 bottom-1 rounded-full bg-surface shadow-xs pointer-events-none"
+            className="absolute top-1 bottom-1 rounded-lg bg-primary-container shadow-xs pointer-events-none"
             style={{
               transform: `translateX(${pillStyle.left}px)`,
               width: `${pillStyle.width}px`,
@@ -242,10 +263,11 @@ export default function Header({ activeTab, setActiveTab }) {
                   aria-current={isActive ? 'page' : undefined}
                   aria-haspopup={isPlanLink ? 'true' : undefined}
                   aria-expanded={isPlanLink ? dropdownOpen : undefined}
-                  className={`relative z-10 px-3.5 py-1.5 rounded-full font-label-md text-label-md font-medium transition-colors cursor-pointer select-none flex items-center gap-1.5 ${isActive
-                      ? 'text-primary font-bold'
+                  className={`relative z-10 px-3.5 py-1.5 rounded-lg font-label-md text-label-md font-semibold transition-colors cursor-pointer select-none flex items-center gap-1.5 ${
+                    isActive
+                      ? 'text-on-primary-container font-bold'
                       : 'text-on-surface-variant hover:text-on-surface'
-                    } focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary`}
+                  } focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-secondary`}
                 >
                   <span className="material-symbols-outlined text-[16px]">
                     {link.icon}
@@ -253,8 +275,9 @@ export default function Header({ activeTab, setActiveTab }) {
                   <span>{link.label}</span>
                   {isPlanLink && (
                     <span
-                      className={`material-symbols-outlined text-[14px] transition-transform ${reducedMotion ? '' : 'duration-160 ease-out'
-                        } ${dropdownOpen ? 'rotate-180' : ''}`}
+                      className={`material-symbols-outlined text-[14px] transition-transform ${
+                        reducedMotion ? '' : 'duration-160 ease-out'
+                      } ${dropdownOpen ? 'rotate-180' : ''}`}
                     >
                       expand_more
                     </span>
@@ -267,11 +290,13 @@ export default function Header({ activeTab, setActiveTab }) {
                     ref={dropdownRef}
                     role="menu"
                     aria-label="Plan route menu"
-                    className={`absolute left-0 top-full mt-2 w-64 p-2 bg-surface/95 backdrop-blur-xl border border-surface-container rounded-2xl shadow-xl transition-all ${reducedMotion ? '' : 'duration-160 ease-out origin-top'
-                      } ${dropdownOpen
+                    className={`absolute left-0 top-full mt-2 w-64 p-2 bg-surface-container-lowest/95 backdrop-blur-xl border border-[#a7f3d0]/60 rounded-2xl shadow-xl transition-all ${
+                      reducedMotion ? '' : 'duration-160 ease-out origin-top'
+                    } ${
+                      dropdownOpen
                         ? 'opacity-100 translate-y-0 scale-100 pointer-events-auto'
                         : 'opacity-0 translate-y-2 scale-[0.98] pointer-events-none'
-                      }`}
+                    }`}
                   >
                     <div className="space-y-1">
                       {PLAN_DROPDOWN_ITEMS.map((item, idx) => (
@@ -279,15 +304,15 @@ export default function Header({ activeTab, setActiveTab }) {
                           key={idx}
                           role="menuitem"
                           onClick={() => handleNavClick('route-planner')}
-                          className="w-full text-left p-2.5 rounded-xl hover:bg-surface-container transition-colors group flex items-start gap-2.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                          className="w-full text-left p-2.5 rounded-xl hover:bg-[#ecfdf5] transition-colors group flex items-start gap-2.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-secondary"
                         >
-                          <div className="w-7 h-7 rounded-lg bg-surface-container flex items-center justify-center text-primary group-hover:bg-primary group-hover:text-on-primary transition-colors flex-shrink-0 mt-0.5">
+                          <div className="w-7 h-7 rounded-lg bg-surface-container flex items-center justify-center text-primary group-hover:bg-[#166534] group-hover:text-white transition-colors flex-shrink-0 mt-0.5">
                             <span className="material-symbols-outlined text-[16px]">
                               {item.icon}
                             </span>
                           </div>
                           <div>
-                            <div className="font-label-md text-label-md font-semibold text-on-surface group-hover:text-primary">
+                            <div className="font-label-md text-label-md font-semibold text-on-surface group-hover:text-[#14532d]">
                               {item.label}
                             </div>
                             <div className="font-body-sm text-[12px] text-on-surface-variant leading-tight">
@@ -304,35 +329,21 @@ export default function Header({ activeTab, setActiveTab }) {
           })}
         </nav>
 
-        {/* Right: Honest AQI Pill + Primary "Find route" CTA */}
-        <div className="flex items-center gap-2.5 flex-shrink-0">
+        {/* Right: Low Exposure Pref badge + Theme Toggle + CTA */}
+        <div className="flex items-center gap-space-sm flex-shrink-0">
+          <div className="hidden sm:flex items-center gap-space-xs px-space-sm py-1 rounded-full bg-secondary-container/60 text-on-secondary-container hover:bg-secondary-container transition-all">
+            <span className="material-symbols-outlined text-[16px]">eco</span>
+            <span className="font-label-md text-label-md font-semibold">Low Exposure Pref</span>
+          </div>
 
-          {/* Honest Average AQI status pill (hidden if request fails) */}
-          {avgAqi !== null && (
-            <div
-              className="hidden lg:inline-flex items-center gap-1.5 px-3 py-1 rounded-full font-data-badge text-data-badge font-semibold select-none border border-black/5"
-              style={{
-                backgroundColor: `${aqiColor}18`,
-                color: aqiColor,
-              }}
-              title="Coverage Area Average Air Quality Index"
-            >
-              <span
-                className="w-2 h-2 rounded-full animate-pulse"
-                style={{ backgroundColor: aqiColor }}
-              />
-              <span>Avg AQI {avgAqi}</span>
-            </div>
-          )}
-
-          {/* Primary Action Button */}
           <button
             onClick={() => handleNavClick('route-planner')}
-            className={`hidden sm:inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-primary text-on-primary font-label-md text-label-md font-semibold shadow-xs hover:bg-primary-container transition-all cursor-pointer ${reducedMotion ? '' : 'active:scale-95'
-              } focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary`}
+            className={`hidden sm:inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#14532d] hover:bg-[#166534] text-white font-label-md text-label-md font-semibold shadow-md transition-all cursor-pointer ${
+              reducedMotion ? '' : 'active:scale-95'
+            } focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-secondary`}
           >
             <span className="material-symbols-outlined text-[16px]">search</span>
-            <span>Find route</span>
+            <span>Plan Route</span>
           </button>
 
           {/* Mobile Hamburger Button with morphing 2 bars */}
