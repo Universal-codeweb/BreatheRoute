@@ -21,7 +21,7 @@ import { getAqiGrid } from '../api';
 import { LEVEL_COLORS } from '../utils/colors';
 
 function getMapStyleUrl() {
-  return `https://api.maptiler.com/maps/streets-v2/style.json?key=${encodeURIComponent(config.maptilerApiKey)}`;
+  return `https://api.maptiler.com/maps/${encodeURIComponent(config.maptilerStyleId)}/style.json?key=${encodeURIComponent(config.maptilerApiKey)}`;
 }
 
 function getLevelColor(level) {

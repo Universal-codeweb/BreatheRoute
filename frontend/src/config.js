@@ -21,6 +21,7 @@ function parseBounds(str) {
 const config = {
   apiUrl: import.meta.env.VITE_API_URL || 'http://localhost:3001/api',
   maptilerApiKey: import.meta.env.VITE_MAPTILER_API_KEY || '',
+  maptilerStyleId: import.meta.env.VITE_MAPTILER_STYLE_ID || '01a1248d-b6f3-70ac-b177-89f5a2dbe764',
 
   // Optional values with defaults
   mapCenter: parseCenter(import.meta.env.VITE_MAP_CENTER),
