@@ -222,12 +222,6 @@ export default function App() {
               <p className={config.apiUrl ? 'text-secondary' : 'text-error font-bold'}>
                 {config.apiUrl ? '✓' : '✗'} VITE_API_URL
               </p>
-<<<<<<< HEAD
-              <p className={config.maptilerApiKey ? 'text-secondary' : 'text-error font-bold'}>
-                {config.maptilerApiKey ? '✓' : '✗'} VITE_MAPTILER_API_KEY
-              </p>
-=======
->>>>>>> af6379ec61f19f7b9f858b5a121d7ac4c1063a9e
             </div>
           </div>
         </div>

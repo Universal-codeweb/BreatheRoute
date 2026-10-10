@@ -1,15 +1,6 @@
 // src/api.js
 // ------------------------------------------------------------------
-<<<<<<< HEAD
-// Data-fetching layer for BreatheRoute.
-//
-// Three functions, all real network calls:
-//   1. getRoutes     — POST /routes to our backend
-//   2. getAqiGrid    — GET  /aqi from our backend
-//   3. searchPlaces  — MapTiler Geocoding API for place search
-=======
 // Data-fetching layer for the BreatheRoute API.
->>>>>>> af6379ec61f19f7b9f858b5a121d7ac4c1063a9e
 // ------------------------------------------------------------------
 
 import config from './config';
@@ -67,35 +58,6 @@ export async function getAqiGrid() {
 }
 
 // ------------------------------------------------------------------
-<<<<<<< HEAD
-// 3) MapTiler Geocoding API — search places by text
-//    https://api.maptiler.com/geocoding/{query}.json?key={key}
-// ------------------------------------------------------------------
-export async function searchPlaces(query, bias) {
-  if (!config.maptilerApiKey) {
-    throw new Error('MapTiler API key is not configured.');
-  }
-
-  let url =
-    `https://api.maptiler.com/geocoding/${encodeURIComponent(query)}.json` +
-    `?key=${config.maptilerApiKey}` +
-    `&limit=5` +
-    `&language=en`;
-
-  // Optional: bias results toward a specific point
-  if (bias) {
-    url += `&proximity=${bias.lng},${bias.lat}`;
-  }
-
-  const data = await fetchWithTimeout(url);
-
-  // Map MapTiler GeoJSON response features to a simple { label, lat, lng } shape
-  return (data.features || []).map((feature) => ({
-    label: feature.place_name || feature.text || 'Unknown',
-    lng: feature.center[0],
-    lat: feature.center[1],
-  }));
-=======
 // 3) GET /places — search places through the backend's Photon integration
 // ------------------------------------------------------------------
 export async function searchPlaces(query, bias) {
@@ -103,5 +65,4 @@ export async function searchPlaces(query, bias) {
   if (bias) params.set('proximity', `${bias.lng},${bias.lat}`);
   const data = await fetchWithTimeout(`${config.apiUrl}/places?${params}`);
   return Array.isArray(data.places) ? data.places : [];
->>>>>>> af6379ec61f19f7b9f858b5a121d7ac4c1063a9e
 }

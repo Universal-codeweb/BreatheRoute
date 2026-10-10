@@ -1,13 +1,9 @@
 // src/components/MapView.jsx
 // ------------------------------------------------------------------
-// Production MapView component using MapLibre GL + MapTiler.
+// Production MapView component using MapLibre GL.
 //
 // Key capabilities:
-<<<<<<< HEAD
-// - MapTiler Streets style as primary base map
-=======
 // - OpenFreeMap Liberty vector style
->>>>>>> af6379ec61f19f7b9f858b5a121d7ac4c1063a9e
 // - Segment lines colored by AQI level (thick selected route with
 //   white casing, dashed fastest, muted alternatives)
 // - Origin and Destination custom markers with pulsing status rings
@@ -19,51 +15,16 @@
 
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import * as maplibregl from 'maplibre-gl';
+import maplibreWorkerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import config from '../config';
 import { getAqiGrid } from '../api';
 import { LEVEL_COLORS } from '../utils/colors';
 
-<<<<<<< HEAD
-/**
- * Returns the MapTiler style URL using the configured API key.
- * Falls back to OSM raster tiles if no key is available.
- */
-function getMapStyleUrl() {
-  if (config.maptilerApiKey) {
-    return `https://api.maptiler.com/maps/streets-v2/style.json?key=${config.maptilerApiKey}`;
-  }
+maplibregl.setWorkerUrl(maplibreWorkerUrl);
 
-  // Fallback: OpenStreetMap raster tiles (no API key needed)
-  return {
-    version: 8,
-    sources: {
-      'osm-raster': {
-        type: 'raster',
-        tiles: [
-          'https://a.tile.openstreetmap.org/{z}/{x}/{y}.png',
-          'https://b.tile.openstreetmap.org/{z}/{x}/{y}.png',
-          'https://c.tile.openstreetmap.org/{z}/{x}/{y}.png',
-        ],
-        tileSize: 256,
-        attribution:
-          '© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>',
-      },
-    },
-    layers: [
-      {
-        id: 'osm-raster-layer',
-        type: 'raster',
-        source: 'osm-raster',
-        minzoom: 0,
-        maxzoom: 19,
-      },
-    ],
-  };
-=======
 function getMapStyleUrl() {
   return config.mapStyleUrl;
->>>>>>> af6379ec61f19f7b9f858b5a121d7ac4c1063a9e
 }
 
 function getLevelColor(level) {
@@ -129,7 +90,7 @@ export default function MapView({
   }, []);
 
   // -----------------------------------------------------------------
-  // Initialize MapLibre map instance with MapTiler
+  // Initialize MapLibre map instance with OpenFreeMap
   // -----------------------------------------------------------------
   useEffect(() => {
     if (!mapContainerRef.current || mapRef.current) return;

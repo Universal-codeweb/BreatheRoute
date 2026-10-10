@@ -5,7 +5,6 @@ This local Node.js service replaces the missing API Gateway/Lambda HTTP layer fo
 ## Requirements
 
 - Node.js 22.12 or newer
-- Node.js 22.12 or newer
 
 ## Run
 

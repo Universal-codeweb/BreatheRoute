@@ -19,14 +19,8 @@ function parseBounds(str) {
 }
 
 const config = {
-<<<<<<< HEAD
-  // Required values
-  apiUrl:         import.meta.env.VITE_API_URL || '',
-  maptilerApiKey: import.meta.env.VITE_MAPTILER_API_KEY || '',
-=======
   apiUrl: import.meta.env.VITE_API_URL || 'http://localhost:3001/api',
   mapStyleUrl: import.meta.env.VITE_MAP_STYLE_URL || 'https://tiles.openfreemap.org/styles/liberty',
->>>>>>> af6379ec61f19f7b9f858b5a121d7ac4c1063a9e
 
   // Optional values with defaults
   mapCenter: parseCenter(import.meta.env.VITE_MAP_CENTER),
@@ -34,13 +28,6 @@ const config = {
   demoBounds: parseBounds(import.meta.env.VITE_DEMO_BOUNDS),
 };
 
-<<<<<<< HEAD
-// True when both required env vars are set
-config.isConfigured = Boolean(
-  config.apiUrl && config.maptilerApiKey
-);
-=======
 config.isConfigured = Boolean(config.apiUrl);
->>>>>>> af6379ec61f19f7b9f858b5a121d7ac4c1063a9e
 
 export default config;
