@@ -25,7 +25,7 @@ function getBarWidth(value, max = 100) {
 
 export default function RouteComparisonMatrix({
   routes = [],
-  _selectedRouteId,
+  selectedRouteId,
   setSelectedRouteId = () => {},
   origin,
   destination,
@@ -34,6 +34,7 @@ export default function RouteComparisonMatrix({
   _error = null,
   onBackToMap,
   onSelectRoute,
+  onStartNavigation,
   onProfileChange,
 }) {
   const [activeProfile, setActiveProfile] = useState(profile || 'general');
@@ -58,10 +59,12 @@ export default function RouteComparisonMatrix({
     ? Math.max(0, recommendedDuration - fastestDuration).toFixed(1)
     : null;
 
-  const handleSelectAndStart = (routeId) => {
+  const handleSelectRoute = (routeId) => {
     setSelectedRouteId(routeId);
     if (onSelectRoute) onSelectRoute(routeId);
   };
+
+  const activeRoute = routes.find((route) => route.id === selectedRouteId) || recommendedRoute;
 
   return (
     <div className="w-full max-w-7xl mx-auto px-margin md:px-margin-tablet lg:px-margin-desktop py-space-xl flex-1 flex flex-col gap-space-lg">
@@ -221,10 +224,7 @@ export default function RouteComparisonMatrix({
         {/* Fastest Route Card */}
         {fastestRoute && (
           <div
-            className="relative bg-surface-container-lowest rounded-2xl p-space-lg flex flex-col justify-between shadow-sm border border-[#fed7d7]"
-            style={{
-              boxShadow: 'rgb(254, 226, 226) 0px 8px 0px 0px, rgba(186, 26, 26, 0.08) 0px 16px 24px',
-            }}
+            className={`relative bg-surface-container-lowest rounded-2xl p-space-lg flex flex-col justify-between shadow-sm border ${selectedRouteId === fastestRoute.id ? 'border-secondary ring-2 ring-secondary/30' : 'border-surface-container'}`}
           >
             <div>
               <div className="flex items-center justify-between gap-space-xs mb-space-md">
@@ -321,11 +321,11 @@ export default function RouteComparisonMatrix({
             <div className="mt-space-lg pt-space-sm">
               <button
                 type="button"
-                onClick={() => handleSelectAndStart(fastestRoute.id)}
-                className="w-full h-12 rounded-xl bg-surface-container hover:bg-surface-container-high text-on-surface font-semibold text-[14px] transition-all flex items-center justify-center gap-space-xs cursor-pointer border border-outline-variant/30"
+                onClick={() => handleSelectRoute(fastestRoute.id)}
+                className={`w-full h-11 rounded-xl font-label-md text-label-md font-semibold transition-colors flex items-center justify-center gap-space-xs cursor-pointer border ${selectedRouteId === fastestRoute.id ? 'bg-[#ecfdf5] text-[#14532d] border-[#86efac]' : 'bg-surface-container hover:bg-surface-container-high text-on-surface border-outline-variant/30'}`}
               >
-                <span>Select Route A (Fastest)</span>
-                <span className="material-symbols-outlined text-[18px]">bolt</span>
+                <span className="material-symbols-outlined text-[18px]">{selectedRouteId === fastestRoute.id ? 'check' : 'bolt'}</span>
+                <span>{selectedRouteId === fastestRoute.id ? 'Selected' : 'Select fastest'}</span>
               </button>
             </div>
           </div>
@@ -334,7 +334,7 @@ export default function RouteComparisonMatrix({
         {/* Cleanest Recommended Route Card (Center Highlight) */}
         {recommendedRoute && (
           <div
-            className="relative bg-white rounded-2xl p-space-lg flex flex-col justify-between shadow-xl ring-2 ring-secondary transition-all duration-300 md:-translate-y-2 border-2 border-[#15803d]"
+            className={`relative bg-white rounded-2xl p-space-lg flex flex-col justify-between shadow-xl transition-all duration-300 border-2 ${selectedRouteId === recommendedRoute.id ? 'ring-2 ring-secondary border-[#15803d]' : 'border-[#dcece2]'}`}
             style={{
               boxShadow: 'rgb(134, 239, 172) 0px 14px 0px 0px, rgba(20, 83, 45, 0.18) 0px 20px 32px',
             }}
@@ -443,11 +443,11 @@ export default function RouteComparisonMatrix({
             <div className="mt-space-lg pt-space-sm">
               <button
                 type="button"
-                onClick={() => handleSelectAndStart(recommendedRoute.id)}
-                className="w-full h-12 rounded-xl bg-gradient-to-b from-[#15803d] to-[#14532d] hover:brightness-110 text-white font-bold text-[14px] transition-all flex items-center justify-center gap-space-xs shadow-md cursor-pointer border border-[#86efac]"
+                onClick={() => handleSelectRoute(recommendedRoute.id)}
+                className={`w-full h-11 rounded-xl font-label-md text-label-md font-semibold transition-colors flex items-center justify-center gap-space-xs cursor-pointer border ${selectedRouteId === recommendedRoute.id ? 'bg-[#ecfdf5] text-[#14532d] border-[#86efac]' : 'bg-surface-container-lowest text-[#14532d] border-[#a7f3d0] hover:bg-[#ecfdf5]'}`}
               >
-                <span className="tracking-wide">Select &amp; Start Route B</span>
-                <span className="material-symbols-outlined text-[18px]">navigation</span>
+                <span className="material-symbols-outlined text-[18px]">{selectedRouteId === recommendedRoute.id ? 'check' : 'eco'}</span>
+                <span>{selectedRouteId === recommendedRoute.id ? 'Selected' : 'Select recommended'}</span>
               </button>
             </div>
           </div>
@@ -556,15 +556,30 @@ export default function RouteComparisonMatrix({
             <div className="mt-space-lg pt-space-sm">
               <button
                 type="button"
-                onClick={() => handleSelectAndStart(alternativeRoute.id)}
-                className="w-full h-12 rounded-xl bg-[#ccfbf1] hover:bg-[#99f6e4] text-[#0f766e] font-semibold text-[14px] transition-all flex items-center justify-center gap-space-xs cursor-pointer border border-[#5eead4]"
+                onClick={() => handleSelectRoute(alternativeRoute.id)}
+                className={`w-full h-11 rounded-xl font-label-md text-label-md font-semibold transition-colors flex items-center justify-center gap-space-xs cursor-pointer border ${selectedRouteId === alternativeRoute.id ? 'bg-[#ccfbf1] text-[#0f766e] border-[#5eead4]' : 'bg-surface-container-lowest text-[#0f766e] border-[#99f6e4] hover:bg-[#f0fdfa]'}`}
               >
-                <span>Select Route C (Cleanest)</span>
-                <span className="material-symbols-outlined text-[18px]">spa</span>
+                <span className="material-symbols-outlined text-[18px]">{selectedRouteId === alternativeRoute.id ? 'check' : 'alt_route'}</span>
+                <span>{selectedRouteId === alternativeRoute.id ? 'Selected' : 'Select alternative'}</span>
               </button>
             </div>
           </div>
         )}
+      </div>
+
+      <div className="flex flex-col sm:flex-row sm:items-center justify-end gap-space-sm">
+        <p className="mr-auto text-body-sm text-on-surface-variant">
+          Selected: <span className="font-semibold text-on-surface">{activeRoute?.label || 'No route'}</span>
+        </p>
+        <button
+          type="button"
+          onClick={() => activeRoute && onStartNavigation?.(activeRoute.id)}
+          disabled={!activeRoute}
+          className="inline-flex min-h-11 items-center justify-center gap-space-xs rounded-xl bg-[#14532d] px-space-lg text-white font-label-md text-label-md font-semibold shadow-sm transition-colors hover:bg-[#166534] disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          <span className="material-symbols-outlined text-[18px]">navigation</span>
+          Start selected route
+        </button>
       </div>
 
       {/* Deep-Dive Analytical Matrix Table */}

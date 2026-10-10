@@ -312,7 +312,7 @@ export default function App() {
               loading={loading}
               error={error}
               onFindRoutes={findRoutes}
-              onSelectRoute={handleSelectRouteAndGo}
+              onSelectRoute={setSelectedRouteId}
               onStartNavigation={handleStartNavigation}
               onGoToComparison={handleGoToComparison}
             />
@@ -334,7 +334,8 @@ export default function App() {
               loading={loading}
               error={error}
               onBackToMap={handleExploreMap}
-              onSelectRoute={handleSelectRouteAndGo}
+              onSelectRoute={setSelectedRouteId}
+              onStartNavigation={handleSelectRouteAndGo}
             />
           )}
 

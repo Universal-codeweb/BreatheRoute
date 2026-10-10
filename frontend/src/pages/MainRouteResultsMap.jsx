@@ -499,23 +499,25 @@ export default function MainRouteResultsMap({
           {/* Action CTAs */}
           {selectedRoute && (
             <div className="flex flex-col gap-space-xs mt-1">
-              <button
-                type="button"
-                onClick={() => onStartNavigation(selectedRoute.id)}
-                className="w-full h-13 rounded-2xl bg-[#14532d] hover:bg-[#166534] text-white font-label-lg text-label-lg font-bold flex items-center justify-center gap-space-xs shadow-lg active:scale-[0.98] transition-all cursor-pointer"
-              >
-                <span>Start Live Navigation</span>
-                <span className="material-symbols-outlined text-[20px]">navigation</span>
-              </button>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-space-sm mt-1">
+                <button
+                  type="button"
+                  onClick={() => onStartNavigation(selectedRoute.id)}
+                  className="min-h-11 rounded-xl bg-[#14532d] hover:bg-[#166534] text-white font-label-md text-label-md font-bold flex items-center justify-center gap-space-xs shadow-sm transition-colors cursor-pointer"
+                >
+                  <span className="material-symbols-outlined text-[18px]">navigation</span>
+                  <span>Start navigation</span>
+                </button>
 
-              <button
-                type="button"
-                onClick={onGoToComparison}
-                className="w-full h-11 rounded-xl bg-surface-container hover:bg-surface-container-high text-primary font-label-md text-label-md font-semibold flex items-center justify-center gap-space-xs transition-colors cursor-pointer"
-              >
-                <span className="material-symbols-outlined text-[18px]">balance</span>
-                <span>Open Full Comparison Matrix</span>
-              </button>
+                <button
+                  type="button"
+                  onClick={onGoToComparison}
+                  className="min-h-11 rounded-xl bg-surface-container-lowest hover:bg-[#ecfdf5] text-primary font-label-md text-label-md font-semibold flex items-center justify-center gap-space-xs border border-outline-variant/40 transition-colors cursor-pointer"
+                >
+                  <span className="material-symbols-outlined text-[18px]">balance</span>
+                  <span>Compare routes</span>
+                </button>
+              </div>
             </div>
           )}
         </div>
