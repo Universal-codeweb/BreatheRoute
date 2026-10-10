@@ -3,7 +3,11 @@
 // Production MapView component using MapLibre GL + MapTiler.
 //
 // Key capabilities:
+<<<<<<< HEAD
 // - MapTiler Streets style as primary base map
+=======
+// - OpenFreeMap Liberty vector style
+>>>>>>> af6379ec61f19f7b9f858b5a121d7ac4c1063a9e
 // - Segment lines colored by AQI level (thick selected route with
 //   white casing, dashed fastest, muted alternatives)
 // - Origin and Destination custom markers with pulsing status rings
@@ -20,6 +24,7 @@ import config from '../config';
 import { getAqiGrid } from '../api';
 import { LEVEL_COLORS } from '../utils/colors';
 
+<<<<<<< HEAD
 /**
  * Returns the MapTiler style URL using the configured API key.
  * Falls back to OSM raster tiles if no key is available.
@@ -55,6 +60,10 @@ function getMapStyleUrl() {
       },
     ],
   };
+=======
+function getMapStyleUrl() {
+  return config.mapStyleUrl;
+>>>>>>> af6379ec61f19f7b9f858b5a121d7ac4c1063a9e
 }
 
 function getLevelColor(level) {

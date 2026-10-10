@@ -1,5 +1,6 @@
 {
   "name": "breatheroute-backend",
+<<<<<<< HEAD
   "version": "1.0.0",
   "private": true,
   "type": "module",
@@ -13,3 +14,15 @@
     "express": "^4.21.0"
   }
 }
+=======
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node --env-file-if-exists=.env server.mjs",
+    "dev": "node --watch --env-file-if-exists=.env server.mjs"
+  },
+  "engines": {
+    "node": ">=22.12.0"
+  }
+}
+>>>>>>> af6379ec61f19f7b9f858b5a121d7ac4c1063a9e

@@ -1,11 +1,15 @@
 // src/api.js
 // ------------------------------------------------------------------
+<<<<<<< HEAD
 // Data-fetching layer for BreatheRoute.
 //
 // Three functions, all real network calls:
 //   1. getRoutes     — POST /routes to our backend
 //   2. getAqiGrid    — GET  /aqi from our backend
 //   3. searchPlaces  — MapTiler Geocoding API for place search
+=======
+// Data-fetching layer for the BreatheRoute API.
+>>>>>>> af6379ec61f19f7b9f858b5a121d7ac4c1063a9e
 // ------------------------------------------------------------------
 
 import config from './config';
@@ -63,6 +67,7 @@ export async function getAqiGrid() {
 }
 
 // ------------------------------------------------------------------
+<<<<<<< HEAD
 // 3) MapTiler Geocoding API — search places by text
 //    https://api.maptiler.com/geocoding/{query}.json?key={key}
 // ------------------------------------------------------------------
@@ -90,4 +95,13 @@ export async function searchPlaces(query, bias) {
     lng: feature.center[0],
     lat: feature.center[1],
   }));
+=======
+// 3) GET /places — search places through the backend's Photon integration
+// ------------------------------------------------------------------
+export async function searchPlaces(query, bias) {
+  const params = new URLSearchParams({ q: query });
+  if (bias) params.set('proximity', `${bias.lng},${bias.lat}`);
+  const data = await fetchWithTimeout(`${config.apiUrl}/places?${params}`);
+  return Array.isArray(data.places) ? data.places : [];
+>>>>>>> af6379ec61f19f7b9f858b5a121d7ac4c1063a9e
 }

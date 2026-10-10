@@ -212,20 +212,22 @@ export default function App() {
               Setup needed
             </h1>
             <p className="font-body-md text-body-md text-on-surface-variant mb-space-lg">
-              BreatheRoute requires environment variables to connect to the backend
-              and map services. Create a{' '}
+              BreatheRoute needs a running backend. Create a{' '}
               <code className="font-data-badge bg-surface-container px-1 py-0.5 rounded">.env</code>{' '}
               file based on{' '}
               <code className="font-data-badge bg-surface-container px-1 py-0.5 rounded">.env.example</code>{' '}
-              and set the required values.
+              and set the API URL if your backend is not running locally.
             </p>
             <div className="text-left bg-surface-container-low rounded-xl p-space-md font-data-badge text-data-badge text-on-surface-variant space-y-1">
               <p className={config.apiUrl ? 'text-secondary' : 'text-error font-bold'}>
                 {config.apiUrl ? '✓' : '✗'} VITE_API_URL
               </p>
+<<<<<<< HEAD
               <p className={config.maptilerApiKey ? 'text-secondary' : 'text-error font-bold'}>
                 {config.maptilerApiKey ? '✓' : '✗'} VITE_MAPTILER_API_KEY
               </p>
+=======
+>>>>>>> af6379ec61f19f7b9f858b5a121d7ac4c1063a9e
             </div>
           </div>
         </div>
