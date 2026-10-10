@@ -22,6 +22,35 @@ import { getRoutes } from './api';
 import { convertAllRoutes } from './adapters';
 import config from './config';
 
+function EmptyState({ icon, title, text, onNavigate }) {
+  return (
+    <div className="flex-1 flex items-center justify-center px-6 py-20">
+      <div className="max-w-md w-full text-center bg-white rounded-3xl border border-[#a7f3d0]/70 shadow-xl p-10">
+        <div className="mx-auto w-16 h-16 rounded-2xl bg-[#dcfce7] text-[#15803d] flex items-center justify-center mb-5 border border-[#86efac]">
+          <span className="material-symbols-outlined text-[32px]">{icon}</span>
+        </div>
+        <h2 className="text-[24px] font-bold text-[#14532d] tracking-tight">{title}</h2>
+        <p className="text-on-surface-variant mt-2 mb-6 leading-relaxed">{text}</p>
+        <div className="flex flex-col sm:flex-row gap-3 justify-center">
+          <button
+            onClick={() => onNavigate('route-planner', 1)}
+            className="inline-flex items-center justify-center gap-2 h-12 px-6 rounded-xl bg-[#14532d] hover:bg-[#166534] text-white font-semibold shadow-md"
+          >
+            <span className="material-symbols-outlined text-[18px]">alt_route</span>
+            Plan a route
+          </button>
+          <button
+            onClick={() => onNavigate('landing')}
+            className="inline-flex items-center justify-center h-12 px-6 rounded-xl bg-[#ecfdf5] border border-[#a7f3d0] text-[#14532d] font-semibold hover:bg-[#d1fae5]"
+          >
+            Back to overview
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   // ---- navigation tab ----
   const [activeTab, setActiveTab] = useState('landing');
@@ -45,14 +74,14 @@ export default function App() {
   // ---------------------------------------------------------------
   // findRoutes – call the real API, convert, navigate to map
   // ---------------------------------------------------------------
-  async function findRoutes() {
+  async function findRoutes({ navigateToMap = true } = {}) {
     if (!origin || !destination) {
       setError('Please select both an origin and a destination.');
-      return;
+      return false;
     }
     if (origin.lat === destination.lat && origin.lng === destination.lng) {
       setError('Origin and destination cannot be the same location.');
-      return;
+      return false;
     }
 
     setLoading(true);
@@ -71,11 +100,14 @@ export default function App() {
       setSelectedRouteId(recommendedId);
       hasSearched.current = true;
 
-      // Navigate to the map explorer page
-      setActiveTab('map-explorer');
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+      if (navigateToMap) {
+        setActiveTab('map-explorer');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+      return true;
     } catch (err) {
       setError(err.message || 'Something went wrong while finding routes.');
+      return false;
     } finally {
       setLoading(false);
     }
@@ -119,6 +151,7 @@ export default function App() {
     if (o) setOrigin(o);
     if (d) setDestination(d);
     if (m) setMode(m === 'walk' ? 'walking' : m === 'bike' ? 'cycling' : m);
+    setPlannerStep(1);
     setActiveTab('route-planner');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -127,8 +160,13 @@ export default function App() {
     if (routes.length > 0) {
       setActiveTab('map-explorer');
       window.scrollTo({ top: 0, behavior: 'smooth' });
-    } else {
+    } else if (origin && destination) {
       findRoutes();
+    } else {
+      setError(null);
+      setPlannerStep(1);
+      setActiveTab('route-planner');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     }
   };
 
@@ -160,41 +198,20 @@ export default function App() {
   // Generic navigation used by Header / Footer / Landing cards
   const goTo = (tab, step) => {
     if (tab === 'route-planner') setPlannerStep(step || 1);
-    if (tab === 'map-explorer' && routes.length === 0 && origin && destination) {
-      findRoutes();
+    if (tab === 'map-explorer' && routes.length === 0) {
+      if (origin && destination) {
+        findRoutes();
+      } else {
+        setError(null);
+        setPlannerStep(1);
+        setActiveTab('route-planner');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
       return;
     }
     setActiveTab(tab);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
-
-  // Friendly empty state for pages that need routes first
-  const EmptyState = ({ icon, title, text }) => (
-    <div className="flex-1 flex items-center justify-center px-6 py-20">
-      <div className="max-w-md w-full text-center bg-white rounded-3xl border border-[#a7f3d0]/70 shadow-xl p-10">
-        <div className="mx-auto w-16 h-16 rounded-2xl bg-[#dcfce7] text-[#15803d] flex items-center justify-center mb-5 border border-[#86efac]">
-          <span className="material-symbols-outlined text-[32px]">{icon}</span>
-        </div>
-        <h2 className="text-[24px] font-bold text-[#14532d] tracking-tight">{title}</h2>
-        <p className="text-on-surface-variant mt-2 mb-6 leading-relaxed">{text}</p>
-        <div className="flex flex-col sm:flex-row gap-3 justify-center">
-          <button
-            onClick={() => goTo('route-planner', 1)}
-            className="inline-flex items-center justify-center gap-2 h-12 px-6 rounded-xl bg-[#14532d] hover:bg-[#166534] text-white font-semibold shadow-md"
-          >
-            <span className="material-symbols-outlined text-[18px]">alt_route</span>
-            Plan a route
-          </button>
-          <button
-            onClick={() => goTo('landing')}
-            className="inline-flex items-center justify-center h-12 px-6 rounded-xl bg-[#ecfdf5] border border-[#a7f3d0] text-[#14532d] font-semibold hover:bg-[#d1fae5]"
-          >
-            Back to overview
-          </button>
-        </div>
-      </div>
-    </div>
-  );
 
   // ---------------------------------------------------------------
   // Setup-needed notice if env vars are missing
@@ -240,7 +257,10 @@ export default function App() {
 
       {/* Main View Router with Craft-style 200ms fade + 8px slide-up transition */}
       <main className="flex-1 w-full flex flex-col">
-        <div key={activeTab} className="page-transition flex-1 w-full flex flex-col">
+        <div
+          key={`${activeTab}:${activeTab === 'route-planner' ? plannerStep : ''}`}
+          className="page-transition flex-1 w-full flex flex-col"
+        >
           {activeTab === 'landing' && (
             <LandingOverview
               origin={origin}
@@ -299,7 +319,7 @@ export default function App() {
           )}
 
           {activeTab === 'route-comparison' && routes.length === 0 && (
-            <EmptyState icon="balance" title="Nothing to compare yet" text="Pick a start and destination first. We'll score every route by air quality, time and traffic so you can compare them side by side." />
+            <EmptyState icon="balance" title="Nothing to compare yet" text="Pick a start and destination first. We'll score every route by air quality, time and traffic so you can compare them side by side." onNavigate={goTo} />
           )}
 
           {activeTab === 'route-comparison' && routes.length > 0 && (
@@ -319,7 +339,7 @@ export default function App() {
           )}
 
           {activeTab === 'active-navigation' && routes.length === 0 && (
-            <EmptyState icon="navigation" title="No route to navigate" text="Plan a route first, then start live navigation with clean-air guidance along the way." />
+            <EmptyState icon="navigation" title="No route to navigate" text="Plan a route first, then start live navigation with clean-air guidance along the way." onNavigate={goTo} />
           )}
 
           {activeTab === 'active-navigation' && routes.length > 0 && (

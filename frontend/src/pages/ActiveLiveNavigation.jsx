@@ -15,18 +15,17 @@ export default function ActiveLiveNavigation({
   onEndSession,
 }) {
   const activeRoute = route || routes[0] || null;
-  const segments = Array.isArray(activeRoute?.segments) && activeRoute.segments.length > 0
-    ? activeRoute.segments
-    : [];
-
+  const routeSteps = Array.isArray(activeRoute?.steps) ? activeRoute.steps : [];
   const [currentStepIdx, setCurrentStepIdx] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [showSummaryModal, setShowSummaryModal] = useState(false);
+  const currentStep = routeSteps[currentStepIdx] || null;
+  const nextStep = routeSteps[currentStepIdx + 1] || null;
 
   // Live GPS tracking
   const [liveLocation, setLiveLocation] = useState(null);
-  const [, setGpsActive] = useState(false);
+  const [gpsActive, setGpsActive] = useState(false);
 
   // Elapsed timer
   useEffect(() => {
@@ -53,6 +52,7 @@ export default function ActiveLiveNavigation({
       },
       () => {
         setGpsActive(false);
+        setLiveLocation(null);
       },
       { enableHighAccuracy: true, maximumAge: 3000, timeout: 15000 }
     );
@@ -67,12 +67,22 @@ export default function ActiveLiveNavigation({
   };
 
   const handleNextStep = () => {
-    if (currentStepIdx < Math.max(1, segments.length - 1)) {
+    if (currentStepIdx < routeSteps.length - 1) {
       setCurrentStepIdx((prev) => prev + 1);
     } else {
       setShowSummaryModal(true);
     }
   };
+
+  const currentStepDistance = currentStep?.distanceKm > 0
+    ? currentStep.distanceKm < 1
+      ? `${Math.round(currentStep.distanceKm * 1000)} m`
+      : `${currentStep.distanceKm.toFixed(1)} km`
+    : '—';
+  const routeAqi = Number(activeRoute?.avgAqi);
+  const routeAqiLabel = Number.isFinite(routeAqi)
+    ? routeAqi <= 50 ? 'Good' : routeAqi <= 100 ? 'Moderate' : routeAqi <= 150 ? 'High' : 'Poor'
+    : 'Unavailable';
 
   return (
     <div className="relative w-full h-[calc(100vh-80px)] min-h-[720px] overflow-hidden bg-surface">
@@ -83,8 +93,8 @@ export default function ActiveLiveNavigation({
           destination={destination}
           routes={activeRoute ? [activeRoute] : []}
           selectedRouteId={activeRoute?.id}
-          userLocation={liveLocation}
-          showAqiLayer={true}
+          liveLocation={liveLocation}
+          showGridDefault
           className="w-full h-full"
         />
       </div>
@@ -108,13 +118,13 @@ export default function ActiveLiveNavigation({
             <div>
               <div className="flex items-center gap-space-xs">
                 <span className="font-headline-sm text-[18px] text-[#15803D] tracking-tight font-bold">
-                  Botanical Shaded Route in Progress
+                  {activeRoute?.label || 'Selected route'}
                 </span>
-                <span className="w-2.5 h-2.5 rounded-full bg-[#16A34A] animate-pulse" />
+                <span className={`w-2.5 h-2.5 rounded-full ${gpsActive ? 'bg-[#16A34A]' : 'bg-amber-500'}`} />
               </div>
               <div className="flex items-center gap-space-xs text-on-surface-variant font-data-badge text-data-badge">
                 <span className="font-medium">
-                  {activeRoute?.distanceKm || '3.2'} km shaded total
+                  {activeRoute?.distanceKm ?? '—'} km route distance
                 </span>
                 <span>•</span>
                 <span className="text-[#15803D] font-semibold">
@@ -122,7 +132,7 @@ export default function ActiveLiveNavigation({
                 </span>
                 <span>•</span>
                 <span className="font-medium">
-                  {activeRoute?.durationMinutes || '22'} min tree canopy
+                  Est. {activeRoute?.durationMinutes ?? activeRoute?.time ?? '—'} min
                 </span>
               </div>
             </div>
@@ -130,23 +140,16 @@ export default function ActiveLiveNavigation({
 
           <div className="flex items-center gap-space-sm bg-[#F0FDF4] py-1.5 px-space-md rounded-xl border border-[#BBF7D0]">
             <div className="flex items-center gap-space-xs px-2 py-0.5 rounded-lg bg-[#DCFCE7] border border-[#86EFAC]">
-              <span className="material-symbols-outlined text-[18px] text-[#15803D]">directions_walk</span>
-              <span className="font-data-metric text-[14px] text-[#15803D] font-bold">
-                4.5 <span className="font-data-badge text-[10px] text-[#15803D] font-normal">km/h</span>
-              </span>
-            </div>
-            <div className="w-px h-6 bg-[#BBF7D0]" />
-            <div className="flex items-center gap-space-xs px-2 py-0.5 rounded-lg bg-[#DCFCE7] border border-[#86EFAC]">
-              <span className="material-symbols-outlined text-[18px] text-[#15803D]">park</span>
-              <span className="font-data-badge text-[11px] text-[#14532D] uppercase font-bold tracking-wider">
-                Canopy 94%
+              <span className="material-symbols-outlined text-[18px] text-[#15803D]">my_location</span>
+              <span className="font-data-badge text-[11px] text-[#14532D] font-bold">
+                {gpsActive && liveLocation ? `GPS ±${Math.round(liveLocation.accuracy)} m` : 'GPS unavailable'}
               </span>
             </div>
             <div className="w-px h-6 bg-[#BBF7D0]" />
             <div className="flex items-center gap-space-xs px-2 py-0.5 rounded-lg bg-[#DCFCE7] border border-[#86EFAC]">
               <span className="material-symbols-outlined text-[18px] text-[#15803D]">air</span>
               <span className="font-data-badge text-[11px] text-[#14532D] font-bold">
-                Clean Air 98%
+                AQI est. {Number.isFinite(routeAqi) ? routeAqi.toFixed(0) : '—'}
               </span>
             </div>
           </div>
@@ -175,20 +178,20 @@ export default function ActiveLiveNavigation({
                 />
               </svg>
               <span className="absolute font-data-metric text-[12px] font-extrabold text-[#14532D]">
-                {activeRoute?.avgAqi || 32}
+                {Number.isFinite(routeAqi) ? routeAqi.toFixed(0) : '—'}
               </span>
             </div>
             <div>
               <div className="flex items-center gap-space-xs">
                 <span className="font-label-md text-label-md uppercase tracking-wider text-on-surface-variant font-bold">
-                  Forest Microclimate
+                  Route AQI estimate
                 </span>
                 <span className="px-2 py-0.5 rounded-full bg-[#DCFCE7] text-[#15803D] font-data-badge text-[10px] font-bold border border-[#86EFAC]">
-                  EXCELLENT PURITY
+                  {routeAqiLabel.toUpperCase()}
                 </span>
               </div>
               <p className="font-body-sm text-[12px] text-on-surface font-medium">
-                PM2.5: 6.2 µg • Canopy: 94% • Shade Temp: 24°C
+                Experimental estimate; not a live sensor reading.
               </p>
             </div>
           </div>
@@ -208,23 +211,23 @@ export default function ActiveLiveNavigation({
             <div className="flex flex-col min-w-0 flex-1">
               <div className="flex items-center justify-between gap-space-xs">
                 <span className="font-data-metric text-[28px] leading-tight font-extrabold text-[#15803D]">
-                  350 m
+                  {currentStepDistance}
                 </span>
                 <span className="px-2.5 py-0.5 rounded-full bg-[#DCFCE7] text-[#15803D] border border-[#86EFAC] font-data-badge text-data-badge font-bold flex items-center gap-1">
                   <span className="material-symbols-outlined text-[13px]">eco</span>
-                  SHADED TURN
+                  {currentStep ? 'ROUTE STEP' : 'ROUTE OVERVIEW'}
                 </span>
               </div>
               <h2
                 className="text-[20px] leading-tight text-on-surface truncate font-semibold mt-0.5"
               >
-                Continue straight under mature tree canopy
+                {currentStep?.instruction || 'Follow the highlighted route on the map'}
               </h2>
               <div className="flex items-center gap-space-xs text-on-surface-variant font-body-sm text-[13px] mt-1">
                 <span>Upcoming:</span>
                 <span className="material-symbols-outlined text-[16px] text-[#15803D]">turn_right</span>
                 <span className="truncate font-semibold text-[#15803D]">
-                  Turn right onto Riparian Green Avenue
+                  {nextStep?.instruction || (routeSteps.length ? 'Final route step' : 'Turn guidance unavailable')}
                 </span>
               </div>
             </div>
@@ -233,18 +236,16 @@ export default function ActiveLiveNavigation({
           {/* Segment Cleanliness & Shade Profile */}
           <div className="bg-[#F0FDF4] rounded-xl p-space-sm flex flex-col gap-1.5 border border-[#86EFAC]/50">
             <div className="flex items-center justify-between text-on-surface-variant font-data-badge text-[10px] uppercase tracking-wider">
-              <span className="font-bold text-[#14532D]">Segment Cleanliness &amp; Shade Profile</span>
-              <span className="text-[#15803D] font-bold">92% Botanical Inhalation Buffer</span>
+              <span className="font-bold text-[#14532D]">Estimated route conditions</span>
+              <span className="text-[#15803D] font-bold">AQI {Number.isFinite(routeAqi) ? routeAqi.toFixed(0) : '—'} · {routeAqiLabel}</span>
             </div>
             <div className="h-2.5 w-full rounded-full bg-[#BBF7D0]/60 overflow-hidden flex shadow-inner">
-              <div className="h-full bg-[#15803D]" style={{ width: '65%' }} title="Pristine Canopy Buffer" />
-              <div className="h-full bg-[#22C55E]" style={{ width: '25%' }} title="Shaded Path" />
-              <div className="h-full bg-[#86EFAC]" style={{ width: '10%' }} title="Riparian Stream Air" />
+              <div className="h-full bg-[#15803D]" style={{ width: `${Number.isFinite(routeAqi) ? Math.max(4, Math.min(100, routeAqi / 2)) : 0}%` }} title="Estimated route AQI" />
             </div>
             <div className="flex items-center justify-between text-on-surface-variant font-data-badge text-[11px]">
-              <span className="text-[#14532D] font-medium">Nehru Boulevard (AQI 38)</span>
-              <span className="text-[#15803D] font-semibold">Green Valley (AQI 32)</span>
-              <span className="text-[#14532D]">Parkway (AQI 35)</span>
+              <span className="text-[#14532D] font-medium">AQI 0</span>
+              <span className="text-[#15803D] font-semibold">AQI 100</span>
+              <span className="text-[#14532D]">AQI 200+</span>
             </div>
           </div>
 
@@ -254,13 +255,13 @@ export default function ActiveLiveNavigation({
               <div className="flex items-center gap-1 text-[#15803D]">
                 <span className="material-symbols-outlined text-[16px]">shield</span>
                 <span className="font-data-badge text-[10px] uppercase font-bold tracking-wider">
-                  Particulate Avoided
+                  Route preference score
                 </span>
               </div>
               <div className="mt-1">
-                <span className="font-data-metric text-[24px] font-extrabold text-[#15803D]">-64%</span>
+                <span className="font-data-metric text-[24px] font-extrabold text-[#15803D]">{activeRoute?.score ?? '—'}/100</span>
                 <p className="font-body-sm text-[11px] leading-tight text-on-surface-variant">
-                  Compared to highway arterial
+                  Experimental preference score
                 </p>
               </div>
             </div>
@@ -269,16 +270,16 @@ export default function ActiveLiveNavigation({
               <div className="flex items-center gap-1 text-on-surface-variant">
                 <span className="material-symbols-outlined text-[16px] text-error">favorite</span>
                 <span className="font-data-badge text-[10px] uppercase font-bold tracking-wider text-[#14532D]">
-                  Aerobic Respiration
+                  Estimated duration
                 </span>
               </div>
               <div className="mt-1">
                 <div className="flex items-baseline gap-1">
-                  <span className="font-data-metric text-[24px] font-extrabold text-[#14532D]">84</span>
-                  <span className="font-data-badge text-[11px] text-on-surface-variant">BPM</span>
+                  <span className="font-data-metric text-[24px] font-extrabold text-[#14532D]">{activeRoute?.durationMinutes ?? activeRoute?.time ?? '—'}</span>
+                  <span className="font-data-badge text-[11px] text-on-surface-variant">min</span>
                 </div>
                 <p className="font-body-sm text-[11px] leading-tight text-[#15803D] font-medium">
-                  Pure Botanical Zone 2
+                  Routing estimate
                 </p>
               </div>
             </div>
@@ -302,8 +303,8 @@ export default function ActiveLiveNavigation({
               onClick={handleNextStep}
               className="flex-1 h-12 rounded-xl bg-[#DCFCE7] text-[#15803D] border border-[#86EFAC] font-label-lg text-label-lg flex items-center justify-center gap-space-xs hover:bg-[#BBF7D0] transition-colors shadow-sm font-semibold cursor-pointer"
             >
-              <span className="material-symbols-outlined text-[20px]">forest</span>
-              <span>Next Step</span>
+              <span className="material-symbols-outlined text-[20px]">{currentStepIdx < routeSteps.length - 1 ? 'arrow_forward' : 'flag'}</span>
+              <span>{currentStepIdx < routeSteps.length - 1 ? 'Next step' : 'Finish route'}</span>
             </button>
 
             <button
@@ -317,11 +318,11 @@ export default function ActiveLiveNavigation({
           </div>
         </div>
 
-        {/* Shaded Canopy Info Pill */}
+        {/* GPS and estimate status */}
         <div className="pointer-events-auto bg-[#14532D] text-white px-space-md py-space-sm rounded-xl shadow-lg flex items-center justify-between text-body-sm text-[13px] border border-[#86EFAC]/40">
           <span className="flex items-center gap-space-xs">
-            <span className="material-symbols-outlined text-[18px] text-[#86EFAC]">eco</span>
-            <span>Breathe easy: Mature tree canopy blocks 92% of direct sunlight and airborne particulates.</span>
+            <span className="material-symbols-outlined text-[18px] text-[#86EFAC]">info</span>
+            <span>{gpsActive ? 'GPS location is shown on the map.' : 'Allow location access to show your position.'} AQI and traffic values are estimates.</span>
           </span>
         </div>
       </div>
@@ -336,10 +337,10 @@ export default function ActiveLiveNavigation({
             <h3
               className="text-[28px] font-bold text-primary"
             >
-              Journey Completed!
+              Navigation session ended
             </h3>
             <p className="text-body-sm text-on-surface-variant">
-              You avoided approximately <strong className="text-secondary">32 µg</strong> of PM2.5 particulate matter by choosing the BreatheRoute canopy corridor.
+              You navigated for {formatTime(elapsedSeconds)} on {activeRoute?.label || 'the selected route'}. AQI and traffic scores are experimental estimates, not live measurements.
             </p>
 
             <div className="grid grid-cols-2 gap-space-xs p-space-sm bg-[#f0fdf4] rounded-2xl border border-[#d1fae5]">
@@ -348,8 +349,8 @@ export default function ActiveLiveNavigation({
                 <span className="text-[20px] font-bold text-[#14532d] font-data-metric">{formatTime(elapsedSeconds)}</span>
               </div>
               <div>
-                <span className="text-[11px] text-on-surface-variant font-data-badge uppercase block">Purity Rating</span>
-                <span className="text-[20px] font-bold text-[#15803d] font-data-metric">94% Pristine</span>
+                <span className="text-[11px] text-on-surface-variant font-data-badge uppercase block">Route AQI estimate</span>
+                <span className="text-[20px] font-bold text-[#15803d] font-data-metric">{Number.isFinite(routeAqi) ? routeAqi.toFixed(0) : '—'}</span>
               </div>
             </div>
 

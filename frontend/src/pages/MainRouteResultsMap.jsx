@@ -40,6 +40,11 @@ export default function MainRouteResultsMap({
     routes.find((r) => r.id !== selectedRoute?.id) ||
     routes[1] ||
     null;
+  const selectedDuration = Number(selectedRoute?.durationMinutes ?? selectedRoute?.time);
+  const fastestDuration = Number(fastestRoute?.durationMinutes ?? fastestRoute?.time);
+  const timeDelta = Number.isFinite(selectedDuration) && Number.isFinite(fastestDuration)
+    ? Math.max(0, selectedDuration - fastestDuration).toFixed(1)
+    : null;
 
   // Swap endpoints
   const handleSwap = () => {
@@ -59,31 +64,30 @@ export default function MainRouteResultsMap({
 
   return (
     <div className="w-full max-w-[1600px] mx-auto px-margin md:px-margin-tablet lg:px-margin-desktop py-space-md flex-1 flex flex-col gap-space-md">
-      {/* Top System Context & Telemetry Bar */}
+      {/* Data status and selected route estimates */}
       <div className="flex flex-wrap items-center justify-between gap-space-sm mb-space-xs">
         <div className="flex items-center gap-space-sm">
-          <span className="w-2.5 h-2.5 rounded-full bg-secondary animate-ping" />
+          <span className="w-2.5 h-2.5 rounded-full bg-secondary" />
           <span className="font-data-badge text-data-badge uppercase text-secondary font-bold tracking-wider">
-            Live Sensor Grid Synchronized
+            Demo environmental estimates
           </span>
-          <span className="text-outline-variant font-data-badge text-data-badge">•</span>
           <span className="font-body-sm text-body-sm text-on-surface-variant">
-            Micro-Sensor Array (14 nodes live)
+            AQI and traffic are not live sensor readings
           </span>
         </div>
 
         <div className="flex items-center gap-space-sm flex-wrap">
           <div className="flex items-center gap-space-xs px-space-sm py-1 bg-surface-container rounded-lg">
             <span className="material-symbols-outlined text-[16px] text-on-surface-variant">air</span>
-            <span className="font-data-badge text-data-badge text-on-surface-variant">WIND: 7.4 km/h SW</span>
+            <span className="font-data-badge text-data-badge text-on-surface-variant">Route AQI: {selectedRoute?.avgAqi ?? '—'}</span>
           </div>
           <div className="flex items-center gap-space-xs px-space-sm py-1 bg-surface-container rounded-lg">
-            <span className="material-symbols-outlined text-[16px] text-on-surface-variant">thermostat</span>
-            <span className="font-data-badge text-data-badge text-on-surface-variant">29.4°C</span>
+            <span className="material-symbols-outlined text-[16px] text-on-surface-variant">traffic</span>
+            <span className="font-data-badge text-data-badge text-on-surface-variant">Traffic estimate: {selectedRoute?.traffic ?? '—'}</span>
           </div>
           <div className="flex items-center gap-space-xs px-space-sm py-1 bg-secondary-container/70 text-on-secondary-container rounded-lg">
-            <span className="material-symbols-outlined text-[16px]">verified</span>
-            <span className="font-data-badge text-data-badge font-bold">Sensor Confidence: 98.4%</span>
+            <span className="material-symbols-outlined text-[16px]">info</span>
+            <span className="font-data-badge text-data-badge font-bold">Experimental score</span>
           </div>
         </div>
       </div>
@@ -221,13 +225,12 @@ export default function MainRouteResultsMap({
               destination={destination}
               routes={routes}
               selectedRouteId={selectedRoute?.id}
-              onSelectRoute={(id) => {
-                setSelectedRouteId(id);
-                if (onSelectRoute) onSelectRoute(id);
-              }}
+              onSelectRoute={setSelectedRouteId}
               pickMode={pickMode}
-              onSelectLocation={handlePickLocation}
-              showAqiLayer={showHeatmap}
+              onPickLocation={handlePickLocation}
+              onCancelPick={() => setPickMode(null)}
+              showAqiGrid={showHeatmap}
+              onToggleAqiGrid={() => setShowHeatmap((visible) => !visible)}
               className="w-full h-full"
             />
           </div>
@@ -292,37 +295,37 @@ export default function MainRouteResultsMap({
                 </span>
               </div>
               <span className="font-data-badge text-data-badge px-2.5 py-0.5 rounded-full bg-white/10 text-[#a2d1b6] border border-[#a4f4bf]/20 tabular-nums font-semibold">
-                Δ +5 min buffer
+                {timeDelta === null ? 'No route comparison' : `Δ ${timeDelta} min vs fastest`}
               </span>
             </div>
 
             <div className="grid grid-cols-2 gap-space-xs pt-1">
-              {/* Cleanest Card */}
+              {/* Selected route card */}
               <div
                 className="bg-white/10 rounded-xl p-2.5 flex flex-col"
                 style={{ border: '1px solid rgba(164, 244, 191, 0.25)' }}
               >
                 <div className="flex items-center gap-1 text-[#a4f4bf]">
                   <span className="material-symbols-outlined text-[15px]">eco</span>
-                  <span className="text-[12px] uppercase font-bold tracking-wider font-ui">Cleanest Pick</span>
+                  <span className="text-[12px] uppercase font-bold tracking-wider font-ui">Selected route</span>
                 </div>
                 <div className="mt-1 flex items-baseline gap-1">
                   <span
                     className="text-[30px] font-semibold text-white leading-none tabular-nums"
                   >
-                    {selectedRoute?.durationMinutes || 22}
+                    {selectedRoute?.durationMinutes ?? selectedRoute?.time ?? '—'}
                   </span>
                   <span className="text-label-md font-medium text-[#7ba88f]">min</span>
                   <span className="text-[13px] text-[#7ba88f] ml-1.5 tabular-nums">
-                    • {selectedRoute?.distanceKm || '3.2'} km
+                    • {selectedRoute?.distanceKm ?? selectedRoute?.distance ?? '—'} km
                   </span>
                 </div>
                 <div className="mt-1.5 flex items-center justify-between pt-1 border-t border-white/10">
                   <span className="font-data-badge text-data-badge text-[#bdedd2] tabular-nums font-semibold">
-                    AQI {selectedRoute?.avgAqi || 65}
+                    AQI est. {selectedRoute?.avgAqi ?? selectedRoute?.aqi ?? '—'}
                   </span>
                   <span className="font-data-badge text-[10px] bg-secondary px-1.5 py-0.5 rounded text-white font-bold tracking-wider uppercase tabular-nums">
-                    Score {selectedRoute?.healthScore || 89}
+                    Score {selectedRoute?.healthScore ?? selectedRoute?.score ?? '—'}
                   </span>
                 </div>
               </div>
@@ -340,19 +343,19 @@ export default function MainRouteResultsMap({
                   <span
                     className="text-[30px] font-semibold text-[#dce9ff] leading-none tabular-nums"
                   >
-                    {fastestRoute?.durationMinutes || 17}
+                    {fastestRoute?.durationMinutes ?? fastestRoute?.time ?? '—'}
                   </span>
                   <span className="text-label-md font-medium text-[#c1c8c1]">min</span>
                   <span className="text-[13px] text-[#c1c8c1] ml-1.5 tabular-nums">
-                    • {fastestRoute?.distanceKm || '2.8'} km
+                    • {fastestRoute?.distanceKm ?? fastestRoute?.distance ?? '—'} km
                   </span>
                 </div>
                 <div className="mt-1.5 flex items-center justify-between pt-1 border-t border-white/10">
                   <span className="font-data-badge text-data-badge text-[#ffdad6] tabular-nums font-semibold">
-                    AQI {fastestRoute?.avgAqi || 170}
+                    AQI est. {fastestRoute?.avgAqi ?? fastestRoute?.aqi ?? '—'}
                   </span>
                   <span className="font-data-badge text-[10px] bg-white/15 px-1.5 py-0.5 rounded text-[#c1c8c1] font-bold tracking-wider uppercase tabular-nums">
-                    Score {fastestRoute?.healthScore || 52}
+                    Score {fastestRoute?.healthScore ?? fastestRoute?.score ?? '—'}
                   </span>
                 </div>
               </div>
@@ -363,13 +366,9 @@ export default function MainRouteResultsMap({
                 tips_and_updates
               </span>
               <p className="text-[13px] text-[#f8f9ff] leading-relaxed">
-                <span
-                  className="italic text-[15px] font-medium text-[#bdedd2]"
-                >
-                  5 min longer
-                </span>{' '}
-                bypasses heavy commercial vehicular corridors, delivering{' '}
-                <strong className="text-[#bdedd2] font-semibold tabular-nums">62% lower particulate intake</strong>.
+                {selectedRoute
+                  ? `Selected route has an estimated AQI of ${selectedRoute.avgAqi ?? selectedRoute.aqi ?? '—'} and a profile score of ${selectedRoute.healthScore ?? selectedRoute.score ?? '—'}/100. These values are experimental estimates.`
+                  : 'Search for a route to compare its estimated AQI, traffic, and duration.'}
               </p>
             </div>
           </div>

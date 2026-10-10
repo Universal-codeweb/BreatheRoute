@@ -15,6 +15,7 @@ import React, { useState, useEffect } from 'react';
 import PlaceInput from '../components/PlaceInput';
 
 import { getAqiGrid } from '../api';
+import config from '../config';
 
 
 
@@ -52,7 +53,7 @@ export default function LandingOverview({
 
 
 
-  // Honest telemetry stats from real getAqiGrid()
+  // Nearby AQI estimate and grid summary from the demo API.
 
   const [, setStatsLoading] = useState(true);
 
@@ -81,10 +82,9 @@ export default function LandingOverview({
 
           const cells = data.cells;
 
-          // Use the AQI from the grid cell nearest the center of the Delhi demo area.
+          // Use the grid cell nearest the configured map center.
           // This is a nearby grid reading, not a route-specific AQI estimate.
-          const demoLat = 28.625;
-          const demoLng = 77.215;
+          const [demoLng, demoLat] = config.mapCenter;
           const nearestCell = cells.reduce((nearest, cell) => {
             const distance =
               (Number(cell.lat) - demoLat) ** 2 +
@@ -210,7 +210,7 @@ export default function LandingOverview({
 
                 <span className="text-[11px] uppercase tracking-[0.16em] text-[#166534] font-bold font-data-badge">
 
-                  Fastest vs <span className="text-[#15803d] font-bold tracking-[0.08em] normal-case text-[12px]">🍃 Pure Air Canopy</span> in 1 Click
+                  Fastest vs <span className="text-[#15803d] font-bold tracking-[0.08em] normal-case text-[12px]">lower AQI estimates</span> in 1 Click
 
                 </span>
 
@@ -252,7 +252,7 @@ export default function LandingOverview({
 
               >
 
-                BreatheRoute blends botanical micro-climate data, street tree canopies, real-time vehicular smog models, and personal lung health to guide your urban walks and rides through cleaner, restorative nature corridors.
+                BreatheRoute compares walking and cycling routes using modeled AQI and traffic estimates. Choose a health profile to adjust how route time and estimated exposure are weighted.
 
               </p>
 
@@ -424,7 +424,7 @@ export default function LandingOverview({
 
                   <span className="font-body-sm text-body-sm">
 
-                    <strong className="text-[#14532d] font-semibold">14,200+</strong> forest trips guided
+                    <strong className="text-[#14532d] font-semibold">4</strong> supported health profiles
 
                   </span>
 
@@ -438,11 +438,11 @@ export default function LandingOverview({
 
                     <strong className="text-[#14532d] font-semibold">
 
-                      {aqiStats?.cellCount ? `${aqiStats.cellCount}+` : '40+'}
+                      {aqiStats?.cellCount ?? 64}
 
                     </strong>{' '}
 
-                    canopy biosensors active
+                    estimated AQI grid cells
 
                   </span>
 
@@ -476,7 +476,7 @@ export default function LandingOverview({
 
                       <div className="font-data-badge text-data-badge text-[#406850]">
 
-                        LIVE CANOPY SENSORS • REAL-TIME DISPERSION
+                        ESTIMATED AQI GRID • NOT LIVE SENSOR DATA
 
                       </div>
 
@@ -486,7 +486,7 @@ export default function LandingOverview({
 
                   <span className="px-space-sm py-1 rounded-full bg-[#dcfce7] text-[#166534] border border-[#86efac] font-data-badge text-data-badge font-semibold flex items-center gap-1">
 
-                    <span className="w-2 h-2 rounded-full bg-[#166534] animate-pulse" /> Botanical Live
+                    <span className="w-2 h-2 rounded-full bg-[#166534]" /> Scenario Preview
 
                   </span>
 
@@ -620,7 +620,7 @@ export default function LandingOverview({
 
                         </span>
 
-                        <span className="text-[#15803d] font-semibold">Canopy Protected</span>
+                        <span className="text-[#15803d] font-semibold">Illustrative corridor</span>
 
                       </div>
 
@@ -680,13 +680,13 @@ export default function LandingOverview({
 
                       <div className="font-headline-sm text-[15px] font-bold leading-tight text-white">
 
-                        +5 min gives 68% cleaner air
+                        Example corridor scenario
 
                       </div>
 
                       <div className="font-body-sm text-[12px] text-[#bbf7d0]">
 
-                        Tree canopy absorbs 45μg/m³ PM2.5
+                        Illustration only · no live sensor data
 
                       </div>
 
@@ -844,9 +844,9 @@ export default function LandingOverview({
 
               <div className="mt-space-lg p-space-sm rounded-xl bg-[#f0fdf4] flex items-center justify-between border border-[#d1fae5]">
 
-                <span className="font-data-badge text-data-badge text-[#166534]">Average PM2.5 Drop</span>
+                <span className="font-data-badge text-data-badge text-[#166534]">Grid AQI estimate</span>
 
-                <span className="font-data-metric text-data-metric text-[#15803d] font-bold">-52.4%</span>
+                <span className="font-data-metric text-data-metric text-[#15803d] font-bold">{aqiStats?.avgAqi ?? '—'}</span>
 
               </div>
 
@@ -1024,7 +1024,7 @@ export default function LandingOverview({
 
 
 
-          {/* Real-time comparison card */}
+          {/* Illustrative comparison card */}
 
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-space-md items-center">
 
@@ -1042,7 +1042,7 @@ export default function LandingOverview({
 
                 <span className="font-data-badge text-data-badge text-[#15803d] font-bold">
 
-                  {demoPreset === 1 ? 'AQI 42 (Pristine)' : 'AQI 48 (Good)'}
+                  Example AQI scenario
 
                 </span>
 
@@ -1082,7 +1082,7 @@ export default function LandingOverview({
 
                   <span className="font-data-badge text-data-badge text-[#15803d] font-semibold">
 
-                    -64% Inhaled PM2.5
+                    Illustrative comparison only
 
                   </span>
 
@@ -1100,7 +1100,7 @@ export default function LandingOverview({
 
                   <span className="font-semibold text-[#15803d]">
 
-                    {demoPreset === 1 ? '14 μg Inhaled' : '18 μg Inhaled'}
+                    Not calculated
 
                   </span>
 
@@ -1138,7 +1138,7 @@ export default function LandingOverview({
 
                 <span className="font-data-badge text-data-badge text-error font-bold">
 
-                  {demoPreset === 1 ? 'AQI 154 (Unhealthy)' : 'AQI 182 (Very Poor)'}
+                  Higher-AQI scenario example
 
                 </span>
 
@@ -1174,7 +1174,7 @@ export default function LandingOverview({
 
                   <span className="font-data-badge text-data-badge text-error font-semibold">
 
-                    +136% Higher Toxic Load
+                    Illustrative comparison only
 
                   </span>
 
@@ -1192,7 +1192,7 @@ export default function LandingOverview({
 
                   <span className="font-semibold text-error">
 
-                    {demoPreset === 1 ? '76 μg Inhaled' : '88 μg Inhaled'}
+                    Not calculated
 
                   </span>
 
@@ -1320,7 +1320,7 @@ export default function LandingOverview({
 
                 <p className="font-body-sm text-body-sm text-on-surface-variant mt-2">
 
-                  Real-time micro-sensor data pairs with canopy density maps to calculate particulate loads along every candidate link.
+                  Modeled AQI and traffic estimates are sampled along candidate routes; sensor measurements are not connected.
 
                 </p>
 
@@ -1328,7 +1328,7 @@ export default function LandingOverview({
 
               <div className="mt-4 pt-3 border-t border-surface-container flex items-center gap-1.5 text-secondary font-semibold text-label-md">
 
-                <span className="material-symbols-outlined text-[18px]">air</span> Micro-Sensors Live
+                <span className="material-symbols-outlined text-[18px]">info</span> Estimates only
 
               </div>
 

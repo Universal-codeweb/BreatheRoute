@@ -217,12 +217,12 @@ export default function Header({ activeTab, setActiveTab, onNavigate, profile })
             </span>
           </button>
 
-          {/* Stitch Live Sensor Telemetry Badge */}
+          {/* Area AQI estimate from the demo grid */}
           {avgAqi !== null && (
             <div className="hidden xl:flex items-center gap-space-xs px-space-sm py-1 bg-[#ecfdf5] rounded-full border border-[#a7f3d0]">
-              <span className="w-2 h-2 rounded-full bg-secondary animate-pulse" />
+              <span className="w-2 h-2 rounded-full bg-secondary" />
               <span className="font-data-badge text-[11px] text-[#166534] uppercase tracking-wider font-semibold">
-                Live Sensor Grid:
+                AQI estimate:
               </span>
               <span className="font-data-badge text-[11px] font-bold text-[#15803d]">
                 AQI {avgAqi} {avgAqi <= 50 ? 'Pristine' : avgAqi <= 100 ? 'Moderate' : 'Poor'}

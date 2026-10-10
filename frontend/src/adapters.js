@@ -55,6 +55,7 @@ export function toUiRoute(r, recommendedRouteId, fastestRouteId) {
     // ---- geometry ----
     segments: r.segments || [],
     coords: r.coords || r.geometry || undefined,
+    steps: Array.isArray(r.steps) ? r.steps : [],
 
     // ---- flags ----
     isRecommended: r.id === recommendedRouteId,

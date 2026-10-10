@@ -6,6 +6,23 @@
 
 import React, { useState } from 'react';
 
+function getAqiCategory(value) {
+  if (!Number.isFinite(Number(value))) return 'Unavailable';
+  if (value <= 50) return 'Good';
+  if (value <= 100) return 'Moderate';
+  if (value <= 150) return 'High';
+  return 'Poor';
+}
+
+function getRouteTime(route) {
+  return Number(route?.durationMinutes ?? route?.time);
+}
+
+function getBarWidth(value, max = 100) {
+  const numericValue = Number(value);
+  return `${Number.isFinite(numericValue) ? Math.max(0, Math.min(100, (numericValue / max) * 100)) : 0}%`;
+}
+
 export default function RouteComparisonMatrix({
   routes = [],
   _selectedRouteId,
@@ -28,15 +45,18 @@ export default function RouteComparisonMatrix({
     null;
 
   const fastestRoute =
-    routes.find((r) => r.isFastest) ||
-    routes.find((r) => r.id !== recommendedRoute?.id) ||
-    routes[1] ||
+    routes.find((r) => r.isFastest && r.id !== recommendedRoute?.id) ||
     null;
 
   const alternativeRoute =
     routes.find((r) => r.id !== recommendedRoute?.id && r.id !== fastestRoute?.id) ||
     routes[2] ||
     null;
+  const fastestDuration = getRouteTime(fastestRoute);
+  const recommendedDuration = getRouteTime(recommendedRoute);
+  const recommendedTimeDelta = Number.isFinite(fastestDuration) && Number.isFinite(recommendedDuration)
+    ? Math.max(0, recommendedDuration - fastestDuration).toFixed(1)
+    : null;
 
   const handleSelectAndStart = (routeId) => {
     setSelectedRouteId(routeId);
@@ -59,7 +79,7 @@ export default function RouteComparisonMatrix({
           <div className="flex items-center gap-space-xs px-space-sm py-1 bg-surface-container-low rounded-full border border-[#a7f3d0]/60">
             <span className="w-2 h-2 rounded-full bg-secondary" />
             <span className="font-data-badge text-data-badge text-on-surface-variant uppercase tracking-wider">
-              Live Telemetry: Sensor Synchronized
+              AQI and traffic estimates
             </span>
           </div>
         </div>
@@ -94,7 +114,7 @@ export default function RouteComparisonMatrix({
           <p
             className="text-[17px] md:text-[19px] leading-[1.5] text-on-surface-variant mt-space-xs font-ui"
           >
-            Evaluating respiratory health exposure versus transit efficiency between{' '}
+              Comparing route duration and experimental AQI/traffic scores between{' '}
             <span className="font-bold text-primary px-1.5 py-0.5 rounded bg-[#ecfdf5] border border-[#a7f3d0]">
               {origin?.label || 'Selected Origin'}
             </span>{' '}
@@ -117,9 +137,9 @@ export default function RouteComparisonMatrix({
             <div className="flex flex-wrap items-center gap-space-xs">
               {[
                 { id: 'general', label: 'General Commuter', icon: 'directions_walk' },
-                { id: 'sensitive', label: 'Pollution Sensitive', icon: 'masks' },
-                { id: 'asthma', label: 'Asthma / Reactive Airway', icon: 'pulmonology' },
-                { id: 'elderly', label: 'Elderly & Child', icon: 'elderly' },
+                { id: 'asthma', label: 'Asthma', icon: 'pulmonology' },
+                { id: 'elderly', label: 'Elderly', icon: 'elderly' },
+                { id: 'child', label: 'Child', icon: 'child_care' },
               ].map((p) => {
                 const isActive = activeProfile === p.id;
                 return (
@@ -166,14 +186,16 @@ export default function RouteComparisonMatrix({
                 </span>
                 <span className="w-1.5 h-1.5 rounded-full bg-secondary" />
                 <span className="font-data-badge text-data-badge text-secondary font-bold px-2 py-0.5 rounded-full bg-white/80 border border-[#a7f3d0]">
-                  Best Overall Balance
+                  Profile-weighted score
                 </span>
               </div>
               <h2 className="font-headline-sm text-headline-sm text-primary font-bold">
-                Why we recommend {recommendedRoute?.label || 'Route B (Cleanest Route)'}
+                Why we recommend {recommendedRoute?.label || 'the selected route'}
               </h2>
               <p className="font-body-md text-body-md text-on-surface-variant mt-0.5">
-                Optimal balance between travel time (+5 mins), air quality (62% lower particulate matter), and traffic safety for your profile.
+                {recommendedRoute
+                  ? `${recommendedRoute.label} is recommended for the ${activeProfile} profile with a score of ${recommendedRoute.healthScore ?? '—'}/100, an AQI estimate of ${recommendedRoute.avgAqi ?? '—'} (${getAqiCategory(recommendedRoute.avgAqi)}), and ${recommendedTimeDelta ?? '—'} min vs the fastest route.`
+                  : 'Choose a route to see its experimental profile score and AQI estimate.'}
               </p>
             </div>
           </div>
@@ -184,10 +206,10 @@ export default function RouteComparisonMatrix({
                 <span className="material-symbols-outlined text-[18px]">favorite</span>
               </div>
               <span className="font-data-metric text-data-metric font-bold text-secondary tracking-tight">
-                -32 µg
+                {getAqiCategory(recommendedRoute?.avgAqi)}
               </span>
               <span className="font-label-md text-label-md text-on-surface-variant font-medium">
-                Lesser Inhaled Dose
+                AQI estimate
               </span>
             </div>
           </div>
@@ -212,7 +234,7 @@ export default function RouteComparisonMatrix({
                   </span>
                   <div>
                     <span className="text-[11px] font-semibold text-on-surface-variant uppercase tracking-[0.06em] block">
-                      Direct Highway Corridor
+                      Fastest available route
                     </span>
                     <h3
                       className="text-[22px] text-on-surface font-bold tracking-tight"
@@ -222,7 +244,7 @@ export default function RouteComparisonMatrix({
                   </div>
                 </div>
                 <span className="px-2.5 py-1 rounded-full bg-error-container text-on-error-container font-data-badge text-[11px] font-bold tracking-wider uppercase">
-                  High Hazard
+                  AQI {getAqiCategory(fastestRoute.avgAqi)}
                 </span>
               </div>
 
@@ -242,7 +264,7 @@ export default function RouteComparisonMatrix({
                     {fastestRoute.distanceKm} <span className="text-[14px] font-normal text-on-surface-variant">km</span>
                   </span>
                   <span className="text-[11px] text-on-surface-variant uppercase tracking-wider block mt-0.5 font-data-badge">
-                    Direct Highway
+                    Modeled route estimate
                   </span>
                 </div>
               </div>
@@ -254,11 +276,11 @@ export default function RouteComparisonMatrix({
                       <span className="material-symbols-outlined text-[16px]">air</span> Avg. AQI
                     </span>
                     <span className="text-[17px] text-error font-bold tracking-tight font-data-badge">
-                      {fastestRoute.avgAqi} Poor
+                      {fastestRoute.avgAqi ?? '—'} {getAqiCategory(fastestRoute.avgAqi)}
                     </span>
                   </div>
                   <div className="w-full h-2.5 rounded-full bg-surface-container overflow-hidden">
-                    <div className="h-full bg-error rounded-full" style={{ width: '82%' }} />
+                    <div className="h-full bg-error rounded-full" style={{ width: getBarWidth(fastestRoute.avgAqi, 200) }} />
                   </div>
                   <span className="text-[11px] text-on-surface-variant block mt-1 tracking-tight">
                     Heavy tailpipe emissions along arterial traffic
@@ -268,29 +290,29 @@ export default function RouteComparisonMatrix({
                 <div>
                   <div className="flex items-center justify-between mb-1">
                     <span className="text-[13px] text-on-surface-variant flex items-center gap-1 font-medium">
-                      <span className="material-symbols-outlined text-[16px]">ecg</span> Respiratory Score
+                      <span className="material-symbols-outlined text-[16px]">ecg</span> Profile Score
                     </span>
                     <span className="text-[17px] text-on-surface font-bold tracking-tight font-data-badge">
-                      {fastestRoute.healthScore || 52} <span className="text-[13px] font-normal text-on-surface-variant">/ 100</span>
+                      {fastestRoute.healthScore ?? '—'} <span className="text-[13px] font-normal text-on-surface-variant">/ 100</span>
                     </span>
                   </div>
                   <div className="w-full h-2.5 rounded-full bg-surface-container overflow-hidden">
-                    <div className="h-full bg-error/70 rounded-full" style={{ width: '52%' }} />
+                    <div className="h-full bg-error/70 rounded-full" style={{ width: getBarWidth(fastestRoute.healthScore) }} />
                   </div>
                 </div>
 
                 <div className="pt-space-sm space-y-space-xs text-[13px]">
                   <div className="flex justify-between py-1.5 bg-surface-container-low px-space-sm rounded-lg">
                     <span className="text-on-surface-variant">Traffic Intensity</span>
-                    <span className="font-semibold text-on-surface">{fastestRoute.trafficLevel || 'Heavy vehicular'}</span>
+                    <span className="font-semibold text-on-surface">{fastestRoute.traffic ?? '—'} / 100</span>
                   </div>
                   <div className="flex justify-between py-1.5 bg-surface-container-low px-space-sm rounded-lg">
-                    <span className="text-on-surface-variant">PM2.5 Inhalation</span>
-                    <span className="font-bold text-error font-data-badge">~48 µg (High)</span>
+                    <span className="text-on-surface-variant">Data source</span>
+                    <span className="font-semibold text-on-surface">Modeled estimate</span>
                   </div>
                   <div className="flex justify-between py-1.5 bg-surface-container-low px-space-sm rounded-lg">
-                    <span className="text-on-surface-variant">Canopy Shade</span>
-                    <span className="font-semibold text-on-surface">12% Sparse</span>
+                    <span className="text-on-surface-variant">Route label</span>
+                    <span className="font-semibold text-on-surface">{fastestRoute.label}</span>
                   </div>
                 </div>
               </div>
@@ -334,7 +356,7 @@ export default function RouteComparisonMatrix({
                   </span>
                   <div>
                     <span className="text-[11px] font-semibold text-secondary uppercase tracking-[0.06em] block">
-                      Protected Tree Corridor
+                      Recommended route
                     </span>
                     <h3
                       className="text-[22px] text-primary font-bold tracking-tight"
@@ -344,7 +366,7 @@ export default function RouteComparisonMatrix({
                   </div>
                 </div>
                 <span className="px-2.5 py-1 rounded-full bg-[#dcfce7] text-[#166534] font-data-badge text-[11px] font-bold tracking-wider uppercase border border-[#86efac]">
-                  -62% PM2.5
+                  Score {recommendedRoute.healthScore ?? '—'}/100
                 </span>
               </div>
 
@@ -355,7 +377,7 @@ export default function RouteComparisonMatrix({
                     {recommendedRoute.durationMinutes} <span className="text-[14px] font-normal text-on-surface-variant">min</span>
                   </span>
                   <span className="text-[11px] text-on-surface-variant uppercase tracking-wider block mt-0.5 font-data-badge">
-                    +5 min offset
+                    {recommendedTimeDelta ?? '—'} min vs fastest
                   </span>
                 </div>
                 <div className="bg-[#f0fdf4] rounded-xl p-space-sm border border-[#a7f3d0]">
@@ -364,7 +386,7 @@ export default function RouteComparisonMatrix({
                     {recommendedRoute.distanceKm} <span className="text-[14px] font-normal text-on-surface-variant">km</span>
                   </span>
                   <span className="text-[11px] text-secondary uppercase tracking-wider block font-bold mt-0.5 font-data-badge">
-                    Shaded Bypass
+                    Modeled route estimate
                   </span>
                 </div>
               </div>
@@ -383,7 +405,7 @@ export default function RouteComparisonMatrix({
                     <div className="h-full bg-secondary rounded-full" style={{ width: '38%' }} />
                   </div>
                   <span className="text-[11px] text-secondary block mt-1 font-semibold tracking-tight">
-                    Stable airflow, away from diesel canyon soot
+                    AQI is estimated from sampled route points.
                   </span>
                 </div>
 
@@ -404,15 +426,15 @@ export default function RouteComparisonMatrix({
                 <div className="pt-space-sm space-y-space-xs text-[13px]">
                   <div className="flex justify-between py-1.5 bg-[#f0fdf4] px-space-sm rounded-lg border border-[#d1fae5]">
                     <span className="text-on-surface-variant">Traffic Intensity</span>
-                    <span className="font-bold text-primary">{recommendedRoute.trafficLevel || 'Low residential'}</span>
+                    <span className="font-bold text-primary">{recommendedRoute.traffic ?? '—'} / 100</span>
                   </div>
                   <div className="flex justify-between py-1.5 bg-[#f0fdf4] px-space-sm rounded-lg border border-[#d1fae5]">
-                    <span className="text-on-surface-variant">PM2.5 Inhalation</span>
-                    <span className="font-bold text-secondary font-data-badge">~16 µg (Low)</span>
+                    <span className="text-on-surface-variant">Data source</span>
+                    <span className="font-semibold text-on-surface">Modeled estimate</span>
                   </div>
                   <div className="flex justify-between py-1.5 bg-[#f0fdf4] px-space-sm rounded-lg border border-[#d1fae5]">
-                    <span className="text-on-surface-variant">Canopy Shade</span>
-                    <span className="font-bold text-primary">64% Sheltered</span>
+                    <span className="text-on-surface-variant">Profile</span>
+                    <span className="font-bold text-primary">{activeProfile}</span>
                   </div>
                 </div>
               </div>
@@ -447,7 +469,7 @@ export default function RouteComparisonMatrix({
                   </span>
                   <div>
                     <span className="text-[11px] font-semibold text-[#0f766e] uppercase tracking-[0.06em] block">
-                      Riparian Stream Promenade
+                      Alternative route
                     </span>
                     <h3
                       className="text-[22px] text-[#0f766e] font-bold tracking-tight"
@@ -457,7 +479,7 @@ export default function RouteComparisonMatrix({
                   </div>
                 </div>
                 <span className="px-2.5 py-1 rounded-full bg-[#ccfbf1] text-[#0f766e] font-data-badge text-[11px] font-bold tracking-wider uppercase border border-[#99f6e4]">
-                  Lowest Toxins
+                  AQI {getAqiCategory(alternativeRoute.avgAqi)}
                 </span>
               </div>
 
@@ -468,7 +490,7 @@ export default function RouteComparisonMatrix({
                     {alternativeRoute.durationMinutes} <span className="text-[14px] font-normal text-on-surface-variant">min</span>
                   </span>
                   <span className="text-[11px] text-on-surface-variant uppercase tracking-wider block mt-0.5 font-data-badge">
-                    +7 min offset
+                    {Math.max(0, getRouteTime(alternativeRoute) - fastestDuration).toFixed(1)} min vs fastest
                   </span>
                 </div>
                 <div className="bg-[#f0fdfa] rounded-xl p-space-sm border border-[#ccfbf1]">
@@ -477,7 +499,7 @@ export default function RouteComparisonMatrix({
                     {alternativeRoute.distanceKm} <span className="text-[14px] font-normal text-on-surface-variant">km</span>
                   </span>
                   <span className="text-[11px] text-[#0f766e] uppercase tracking-wider block font-bold mt-0.5 font-data-badge">
-                    +700m detour
+                    Route distance
                   </span>
                 </div>
               </div>
@@ -496,7 +518,7 @@ export default function RouteComparisonMatrix({
                     <div className="h-full bg-[#2dd4bf] rounded-full" style={{ width: '25%' }} />
                   </div>
                   <span className="text-[11px] text-secondary block mt-1 font-semibold tracking-tight">
-                    Cleanest recorded air pocket along riparian groves
+                    AQI is estimated from sampled route points.
                   </span>
                 </div>
 
@@ -517,15 +539,15 @@ export default function RouteComparisonMatrix({
                 <div className="pt-space-sm space-y-space-xs text-[13px]">
                   <div className="flex justify-between py-1.5 bg-[#f0fdfa] px-space-sm rounded-lg border border-[#ccfbf1]">
                     <span className="text-on-surface-variant">Traffic Intensity</span>
-                    <span className="font-semibold text-[#0f766e]">{alternativeRoute.trafficLevel || 'Very low parkway'}</span>
+                    <span className="font-semibold text-[#0f766e]">{alternativeRoute.traffic ?? '—'} / 100</span>
                   </div>
                   <div className="flex justify-between py-1.5 bg-[#f0fdfa] px-space-sm rounded-lg border border-[#ccfbf1]">
-                    <span className="text-on-surface-variant">PM2.5 Inhalation</span>
-                    <span className="font-bold text-secondary font-data-badge">~11 µg (Minimal)</span>
+                    <span className="text-on-surface-variant">Data source</span>
+                    <span className="font-semibold text-on-surface">Modeled estimate</span>
                   </div>
                   <div className="flex justify-between py-1.5 bg-[#f0fdfa] px-space-sm rounded-lg border border-[#ccfbf1]">
-                    <span className="text-on-surface-variant">Canopy Shade</span>
-                    <span className="font-bold text-primary">82% Full Cover</span>
+                    <span className="text-on-surface-variant">Profile</span>
+                    <span className="font-bold text-primary">{activeProfile}</span>
                   </div>
                 </div>
               </div>
@@ -557,14 +579,14 @@ export default function RouteComparisonMatrix({
             <h2
               className="text-[26px] md:text-[30px] leading-tight text-primary font-bold tracking-tight"
             >
-              Granular Sensor &amp; <span className="italic font-normal text-secondary">Exposure Analysis</span>
+              Route <span className="italic font-normal text-secondary">Score Details</span>
             </h2>
             <p className="font-body-md text-body-md text-on-surface-variant">
-              Standardized EPA AQI &amp; CPCB telemetry parameters measured along candidate corridors
+              Experimental AQI and traffic estimates along candidate corridors; not live measurements.
             </p>
           </div>
           <span className="hidden md:inline-flex items-center gap-1 font-data-badge text-data-badge text-on-surface-variant bg-surface-container px-space-sm py-1 rounded-full border border-outline-variant/30">
-            <span className="material-symbols-outlined text-[14px]">update</span> Real-time delta: Live
+            <span className="material-symbols-outlined text-[14px]">info</span> Estimate only
           </span>
         </div>
 
@@ -572,97 +594,28 @@ export default function RouteComparisonMatrix({
           <table className="w-full text-left border-collapse font-ui">
             <thead>
               <tr className="bg-surface-container text-on-surface-variant text-[13px] uppercase tracking-wider font-semibold">
-                <th className="py-space-md px-space-md font-bold">Evaluation Parameter</th>
-                <th className="py-space-md px-space-md font-bold">⚡ Route A (Fastest)</th>
-                <th className="py-space-md px-space-md bg-[#ecfdf5] text-[#166534] font-bold border-b-2 border-[#22c55e]">
-                  🌱 Route B (Balanced)
-                </th>
-                <th className="py-space-md px-space-md bg-[#ccfbf1] text-[#0f766e] font-bold border-b-2 border-[#2dd4bf]">
-                  🌿 Route C (Ultra Clean)
-                </th>
+                <th className="py-space-md px-space-md font-bold">Route</th>
+                <th className="py-space-md px-space-md font-bold">Distance</th>
+                <th className="py-space-md px-space-md font-bold">Est. time</th>
+                <th className="py-space-md px-space-md font-bold">AQI estimate</th>
+                <th className="py-space-md px-space-md font-bold">Traffic estimate</th>
+                <th className="py-space-md px-space-md font-bold">Profile score</th>
               </tr>
             </thead>
             <tbody className="text-[14px] text-on-surface divide-y divide-surface-container">
-              <tr>
-                <td className="py-space-md px-space-md font-semibold text-primary flex items-center gap-2">
-                  <span className="material-symbols-outlined text-[18px] text-on-surface-variant">timer</span>
-                  Total Commute Duration
-                </td>
-                <td className="py-space-md px-space-md font-semibold font-data-badge">
-                  {fastestRoute?.durationMinutes || 17} min
-                </td>
-                <td className="py-space-md px-space-md bg-[#f0fdf4] text-secondary font-bold font-data-badge">
-                  {recommendedRoute?.durationMinutes || 22} min (+5m)
-                </td>
-                <td className="py-space-md px-space-md font-semibold font-data-badge">
-                  {alternativeRoute?.durationMinutes || 24} min (+7m)
-                </td>
-              </tr>
-              <tr>
-                <td className="py-space-md px-space-md font-semibold text-primary flex items-center gap-2">
-                  <span className="material-symbols-outlined text-[18px] text-on-surface-variant">distance</span>
-                  Geographic Length
-                </td>
-                <td className="py-space-md px-space-md font-semibold font-data-badge">
-                  {fastestRoute?.distanceKm || 2.8} km
-                </td>
-                <td className="py-space-md px-space-md bg-[#f0fdf4] font-semibold font-data-badge">
-                  {recommendedRoute?.distanceKm || 3.2} km
-                </td>
-                <td className="py-space-md px-space-md font-semibold font-data-badge">
-                  {alternativeRoute?.distanceKm || 3.5} km
-                </td>
-              </tr>
-              <tr>
-                <td className="py-space-md px-space-md font-semibold text-primary flex items-center gap-2">
-                  <span className="material-symbols-outlined text-[18px] text-on-surface-variant">air</span>
-                  Average PM2.5 Concentration
-                </td>
-                <td className="py-space-md px-space-md text-error font-semibold">
-                  <span className="font-data-badge">92.4</span> µg/m³
-                  <span className="ml-1 text-[11px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-error-container text-on-error-container">
-                    Unhealthy
-                  </span>
-                </td>
-                <td className="py-space-md px-space-md bg-[#f0fdf4] text-secondary font-bold">
-                  <span className="font-data-badge">34.1</span> µg/m³
-                  <span className="ml-1 text-[11px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-[#dcfce7] text-[#166534]">
-                    Moderate
-                  </span>
-                </td>
-                <td className="py-space-md px-space-md text-secondary font-bold">
-                  <span className="font-data-badge">18.6</span> µg/m³
-                  <span className="ml-1 text-[11px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-[#dcfce7] text-[#166534]">
-                    Good
-                  </span>
-                </td>
-              </tr>
-              <tr>
-                <td className="py-space-md px-space-md font-semibold text-primary flex items-center gap-2">
-                  <span className="material-symbols-outlined text-[18px] text-on-surface-variant">park</span>
-                  Canopy Shade Coverage
-                </td>
-                <td className="py-space-md px-space-md font-medium font-data-badge">12% Direct Sun</td>
-                <td className="py-space-md px-space-md bg-[#f0fdf4] text-secondary font-bold font-data-badge">
-                  64% Full Shade
-                </td>
-                <td className="py-space-md px-space-md text-secondary font-bold font-data-badge">
-                  82% Dense Forest
-                </td>
-              </tr>
-              <tr>
-                <td className="py-space-md px-space-md font-semibold text-primary flex items-center gap-2">
-                  <span className="material-symbols-outlined text-[18px] text-on-surface-variant">shield</span>
-                  Cumulative Inhaled Dose
-                </td>
-                <td className="py-space-md px-space-md text-error font-bold font-data-badge">~48 µg (High)</td>
-                <td className="py-space-md px-space-md bg-[#f0fdf4] text-secondary font-bold font-data-badge">
-                  ~16 µg (-64%)
-                </td>
-                <td className="py-space-md px-space-md text-secondary font-bold font-data-badge">
-                  ~11 µg (-77%)
-                </td>
-              </tr>
+              {routes.map((route) => (
+                <tr key={route.id}>
+                  <td className="py-space-md px-space-md font-semibold text-primary">
+                    {route.label || route.name || route.id}
+                    {route.isRecommended && <span className="ml-2 text-[11px] text-secondary"> Recommended</span>}
+                  </td>
+                  <td className="py-space-md px-space-md font-data-badge">{route.distanceKm ?? '—'} km</td>
+                  <td className="py-space-md px-space-md font-data-badge">{route.durationMinutes ?? route.time ?? '—'} min</td>
+                  <td className="py-space-md px-space-md font-data-badge">{route.avgAqi ?? '—'} · {getAqiCategory(route.avgAqi)}</td>
+                  <td className="py-space-md px-space-md font-data-badge">{route.traffic ?? '—'} / 100</td>
+                  <td className="py-space-md px-space-md font-data-badge">{route.healthScore ?? route.score ?? '—'} / 100</td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>

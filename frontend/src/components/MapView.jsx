@@ -46,6 +46,8 @@ export default function MapView({
   className = '',
   height = '100%',
   showGridDefault = true,
+  showAqiGrid: controlledAqiGrid,
+  onToggleAqiGrid,
 }) {
   const mapContainerRef = useRef(null);
   const mapRef = useRef(null);
@@ -56,7 +58,8 @@ export default function MapView({
   const liveMarkerRef = useRef(null);
 
   // Layer toggles & status
-  const [showAqiGrid, setShowAqiGrid] = useState(showGridDefault);
+  const [internalAqiGrid, setInternalAqiGrid] = useState(showGridDefault);
+  const showAqiGrid = controlledAqiGrid ?? internalAqiGrid;
   const [mapLoaded, setMapLoaded] = useState(false);
   const [aqiCells, setAqiCells] = useState([]);
   const [isStyleReady, setIsStyleReady] = useState(false);
@@ -696,7 +699,13 @@ export default function MapView({
         {/* Toggle AQI Grid Overlay */}
         <button
           type="button"
-          onClick={() => setShowAqiGrid((prev) => !prev)}
+          onClick={() => {
+            if (onToggleAqiGrid) {
+              onToggleAqiGrid();
+            } else {
+              setInternalAqiGrid((prev) => !prev);
+            }
+          }}
           className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold backdrop-blur-md shadow-md border transition-all ${
             showAqiGrid
               ? 'bg-secondary text-on-secondary border-secondary/60 shadow-secondary/20'

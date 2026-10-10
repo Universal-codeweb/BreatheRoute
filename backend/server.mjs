@@ -241,6 +241,11 @@ async function getRoutes(body) {
       avgTraffic: environment.avgTraffic,
       coords,
       segments: [{ coords, level, aqi: Number(environment.avgAqi.toFixed(1)) }],
+      steps: trip.legs.flatMap((leg) => (leg.maneuvers || []).map((maneuver) => ({
+        instruction: maneuver.instruction || 'Continue on the selected route.',
+        distanceKm: Number((maneuver.length || 0).toFixed(3)),
+        durationMin: Number(((maneuver.time || 0) / 60).toFixed(1)),
+      }))),
     };
   });
 

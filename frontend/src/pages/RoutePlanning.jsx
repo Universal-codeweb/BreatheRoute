@@ -29,11 +29,28 @@ export default function RoutePlanning({
   const [currentStep, setCurrentStep] = useState(initialStep);
   const [pickMode, setPickMode] = useState(null); // 'origin' | 'destination' | null
   const [previewSelectedId, setPreviewSelectedId] = useState(null);
+  const [stepError, setStepError] = useState(null);
 
-  const handleNext = () => {
-    if (currentStep === 3) {
-      onFindRoutes();
+  const handleNext = async () => {
+    if (currentStep === 1) {
+      if (!origin || !destination) {
+        setStepError('Choose both a start location and a destination to continue.');
+        return;
+      }
+      if (origin.lat === destination.lat && origin.lng === destination.lng) {
+        setStepError('Start and destination must be different locations.');
+        return;
+      }
     }
+
+    if (currentStep === 3) {
+      setStepError(null);
+      const succeeded = await onFindRoutes({ navigateToMap: false });
+      if (succeeded) setCurrentStep(4);
+      return;
+    }
+
+    setStepError(null);
     if (currentStep < 4) {
       setCurrentStep((prev) => prev + 1);
     }
@@ -48,29 +65,29 @@ export default function RoutePlanning({
       id: 'general',
       icon: '🧍',
       title: 'General Commuter',
-      desc: 'Balance travel time, distance, traffic, and air quality equally.',
+      desc: 'Balance estimated AQI, traffic, and duration using general route weights.',
       badge: 'Balanced Inhalation',
-    },
-    {
-      id: 'pollution',
-      icon: '🌿',
-      title: 'Pollution Sensitive',
-      desc: 'Heavy weight toward clean tree canopies, low particulate, and greenways.',
-      badge: 'Max Purity Filter',
     },
     {
       id: 'asthma',
       icon: '🫁',
       title: 'Asthma / Reactive',
-      desc: 'Strictly penalises PM2.5, PM10 spikes, and stagnant vehicle exhaust canyons.',
-      badge: 'Zero Spikes Priority',
+      desc: 'Give estimated AQI more weight when comparing routes.',
+      badge: 'AQI Priority',
     },
     {
       id: 'elderly',
-      icon: '👶',
-      title: 'Elderly & Child',
-      desc: 'Prefers shaded green avenues, lower physical grade, and tranquil sidewalks.',
-      badge: 'Gentle Elevation',
+      icon: 'elderly',
+      title: 'Elderly',
+      desc: 'Favor lower estimated AQI while balancing trip duration.',
+      badge: 'Comfort Priority',
+    },
+    {
+      id: 'child',
+      icon: 'child_care',
+      title: 'Child',
+      desc: 'Give estimated AQI more weight when comparing routes.',
+      badge: 'AQI Priority',
     },
   ];
 
@@ -78,7 +95,7 @@ export default function RoutePlanning({
     { step: 1, title: 'Destination', subtitle: 'Waypoint & target', icon: 'pin_drop' },
     { step: 2, title: 'Travel Mode', subtitle: 'Walk vs Cycle', icon: 'directions_walk' },
     { step: 3, title: 'Health Filters', subtitle: 'Exposure priorities', icon: 'cardiology' },
-    { step: 4, title: 'Telemetry Engine', subtitle: 'Synthesize routes', icon: 'insights' },
+    { step: 4, title: 'Route Results', subtitle: 'Review estimates', icon: 'insights' },
   ];
 
   const activeSelectedRoute =
@@ -117,21 +134,20 @@ export default function RoutePlanning({
           </div>
         </div>
 
-        {/* Live Sensor Telemetry Badge */}
+        {/* Estimated-data status */}
         <div className="flex items-center gap-space-md bg-surface-container-low px-space-md py-2 rounded-2xl shadow-sm border border-[#a7f3d0]/40">
           <div className="flex items-center gap-space-xs">
-            <span className="w-2 h-2 rounded-full bg-secondary animate-pulse" />
+            <span className="w-2 h-2 rounded-full bg-secondary" />
             <span className="font-data-badge text-data-badge text-on-surface-variant uppercase tracking-wider text-[11px]">
-              Live Sensors:
+              Data:
             </span>
             <span className="font-data-badge text-data-badge font-semibold text-secondary tabular-nums text-[12px]">
-              Micro-Sensor Array Active
+              Modeled AQI and traffic estimates
             </span>
           </div>
           <div className="h-4 w-px bg-surface-container-highest" />
           <div className="flex items-center gap-space-xs font-data-badge text-data-badge text-on-surface-variant">
-            <span className="text-[11px] uppercase tracking-wider">Model:</span>
-            <span className="font-semibold text-primary tabular-nums text-[12px]">CPCB / EPA-AQI</span>
+            <span className="font-semibold text-primary tabular-nums text-[12px]">Not live measurements</span>
           </div>
         </div>
       </div>
@@ -202,7 +218,7 @@ export default function RoutePlanning({
                 Where do you <span className="font-semibold italic text-secondary">want to wander?</span>
               </h2>
               <p className="font-body-md text-body-md text-on-surface-variant/90 leading-relaxed mt-2">
-                Set your corridor. We will cross-reference street canopy, vehicle emissions, and live dispersion models.
+                Set your corridor. We compare route geometry with clearly labeled AQI and traffic estimates.
               </p>
             </div>
 
@@ -213,7 +229,7 @@ export default function RoutePlanning({
                   <div className="flex items-center gap-2 mb-1">
                     <span className="w-2.5 h-2.5 rounded-full bg-secondary" />
                     <span className="font-label-md text-label-md font-bold text-[#14532d] uppercase tracking-wider">
-                      Origin &amp; Waypoint Coordinates
+                      Start &amp; Destination
                     </span>
                   </div>
 
@@ -235,20 +251,20 @@ export default function RoutePlanning({
                     isPicking={pickMode === 'destination'}
                   />
 
-                  {error && (
+                  {(error || stepError) && (
                     <div className="text-error text-body-sm bg-error-container/40 p-2.5 rounded-xl border border-error/20 flex items-center gap-1.5 mt-1">
                       <span className="material-symbols-outlined text-[16px]">error</span>
-                      <span>{error}</span>
+                      <span>{stepError || error}</span>
                     </div>
                   )}
                 </div>
 
                 {/* Canopy detection card */}
                 <div className="p-space-md bg-[#ecfdf5] rounded-2xl flex items-start gap-space-sm border border-[#a7f3d0]">
-                  <span className="material-symbols-outlined text-secondary text-[22px] mt-0.5">park</span>
+                  <span className="material-symbols-outlined text-secondary text-[22px] mt-0.5">info</span>
                   <p className="font-body-sm text-[13px] text-on-surface leading-relaxed">
-                    <span className="font-bold text-secondary tracking-tight">Canopy Detection Active:</span>{' '}
-                    Paths along residential corridors and water bodies have up to <span className="font-semibold tabular-nums">48%</span> higher tree canopy density than main highways, yielding significantly reduced ambient particulate absorption.
+                    <span className="font-bold text-secondary tracking-tight">Estimate notice:</span>{' '}
+                    AQI and traffic values are modeled comparisons, not live sensor readings or medical advice.
                   </p>
                 </div>
               </div>
@@ -259,7 +275,7 @@ export default function RoutePlanning({
                   <MapView
                     origin={origin}
                     destination={destination}
-                    onSelectLocation={(loc) => {
+                    onPickLocation={(loc) => {
                       if (pickMode === 'origin') {
                         setOrigin(loc);
                         setPickMode(null);
@@ -269,6 +285,7 @@ export default function RoutePlanning({
                       }
                     }}
                     pickMode={pickMode}
+                    onCancelPick={() => setPickMode(null)}
                     className="w-full h-full"
                   />
                 </div>
@@ -279,14 +296,14 @@ export default function RoutePlanning({
                     <div className="flex items-center gap-1">
                       <span className="material-symbols-outlined text-[16px] text-[#15803d]">air</span>
                       <span className="font-data-badge text-[11px] uppercase tracking-wider font-bold text-[#166534]">
-                        Wind Vector
+                        AQI source
                       </span>
                     </div>
                     <p className="font-data-metric text-[18px] font-bold mt-0.5 tabular-nums tracking-tight text-[#052e16]">
-                      7.4 km/h SW
+                      Modeled grid
                     </p>
                     <p className="font-data-badge text-[11px] font-semibold text-[#15803d]">
-                      Smog dispersion active
+                      Not live sensors
                     </p>
                   </div>
 
@@ -294,14 +311,14 @@ export default function RoutePlanning({
                     <div className="flex items-center gap-1">
                       <span className="material-symbols-outlined text-[16px] text-[#15803d]">thermostat</span>
                       <span className="font-data-badge text-[11px] uppercase tracking-wider font-bold text-[#166534]">
-                        Microclimate
+                        Traffic source
                       </span>
                     </div>
                     <p className="font-data-metric text-[18px] font-bold mt-0.5 tabular-nums tracking-tight text-[#052e16]">
-                      28.2°C • 58% RH
+                      Modeled estimate
                     </p>
                     <p className="font-data-badge text-[11px] font-semibold text-[#15803d]">
-                      Clean thermal layer
+                      Not live traffic data
                     </p>
                   </div>
                 </div>
@@ -323,7 +340,7 @@ export default function RoutePlanning({
                 How are you travelling?
               </h2>
               <p className="font-body-md text-body-md text-on-surface-variant mt-1">
-                Choose your locomotion mode. Inhalation ventilation rates and elevation penalties adapt according to respiratory physiology.
+                  Choose walking or cycling route geometry. Your health profile adjusts the experimental route-score weights.
               </p>
             </div>
 
@@ -436,6 +453,13 @@ export default function RoutePlanning({
               </p>
             </div>
 
+            {(error || stepError) && (
+              <div role="alert" className="max-w-3xl text-error text-body-sm bg-error-container/40 p-3 rounded-xl border border-error/20 flex items-center gap-2">
+                <span className="material-symbols-outlined text-[18px]">error</span>
+                <span>{stepError || error}</span>
+              </div>
+            )}
+
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-space-md pt-space-xs">
               {profileOptions.map((opt) => {
                 const isSelected = profile === opt.id;
@@ -513,8 +537,8 @@ export default function RoutePlanning({
             {loading ? (
               <div className="h-[380px] rounded-2xl bg-surface-container-low flex flex-col items-center justify-center gap-3">
                 <span className="material-symbols-outlined text-[36px] text-secondary animate-spin">autorenew</span>
-                <p className="font-headline-sm text-primary font-bold">Synthesizing live atmospheric corridors...</p>
-                <p className="font-body-sm text-on-surface-variant">Calculating tree shade, PM2.5 dispersion, and minute ventilation</p>
+                <p className="font-headline-sm text-primary font-bold">Calculating route options...</p>
+                <p className="font-body-sm text-on-surface-variant">Comparing route length, duration, and estimated environmental scores</p>
               </div>
             ) : routes.length > 0 ? (
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-space-lg">
@@ -604,10 +628,11 @@ export default function RoutePlanning({
             <button
               type="button"
               onClick={handleNext}
+              disabled={currentStep === 3 && loading}
               className="px-space-xl py-2.5 rounded-xl bg-[#14532d] hover:bg-[#166534] text-white font-label-lg text-label-lg font-semibold shadow-md active:scale-[0.98] transition-all cursor-pointer flex items-center gap-space-xs"
             >
-              <span>{currentStep === 3 ? 'Synthesize Corridors' : 'Continue'}</span>
-              <span className="material-symbols-outlined text-[18px]">arrow_forward</span>
+              <span>{currentStep === 3 ? (loading ? 'Scoring routes…' : 'Score Routes') : 'Continue'}</span>
+              <span className="material-symbols-outlined text-[18px]">{loading && currentStep === 3 ? 'progress_activity' : 'arrow_forward'}</span>
             </button>
           ) : (
             <button
