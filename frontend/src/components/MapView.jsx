@@ -1,9 +1,9 @@
 // src/components/MapView.jsx
 // ------------------------------------------------------------------
-// Production MapView component using MapLibre GL.
+// Production MapView component using MapLibre GL + MapTiler.
 //
 // Key capabilities:
-// - Amazon Location Service style with seamless CartoDB fallback
+// - MapTiler Streets style as primary base map
 // - Segment lines colored by AQI level (thick selected route with
 //   white casing, dashed fastest, muted alternatives)
 // - Origin and Destination custom markers with pulsing status rings
@@ -20,50 +20,41 @@ import config from '../config';
 import { getAqiGrid } from '../api';
 import { LEVEL_COLORS } from '../utils/colors';
 
-// Fallback high-contrast map style matching BreatheRoute aesthetic
-const getFallbackRasterStyle = (key) => ({
-  version: 8,
-  sources: {
-    'carto-voyager': {
-      type: 'raster',
-      tiles: [
-        `https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}@2x.png${key ? `?api_key=${key}` : ''}`,
-        `https://b.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}@2x.png${key ? `?api_key=${key}` : ''}`,
-        `https://c.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}@2x.png${key ? `?api_key=${key}` : ''}`,
-        `https://d.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}@2x.png${key ? `?api_key=${key}` : ''}`,
-      ],
-      tileSize: 256,
-      attribution:
-        '© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>, © <a href="https://carto.com/attributions" target="_blank" rel="noopener">CARTO</a>',
-    },
-  },
-  layers: [
-    {
-      id: 'carto-voyager-layer',
-      type: 'raster',
-      source: 'carto-voyager',
-      minzoom: 0,
-      maxzoom: 20,
-    },
-  ],
-});
-
+/**
+ * Returns the MapTiler style URL using the configured API key.
+ * Falls back to OSM raster tiles if no key is available.
+ */
 function getMapStyleUrl() {
-  // 1. Amazon Location Service (if real key configured)
-  if (
-    config.locationApiKey &&
-    config.locationApiKey !== 'test-api-key' &&
-    config.awsRegion
-  ) {
-    return `https://maps.geo.${config.awsRegion}.amazonaws.com/maps/v0/maps/explore.map/style-descriptor?key=${config.locationApiKey}`;
+  if (config.maptilerApiKey) {
+    return `https://api.maptiler.com/maps/streets-v2/style.json?key=${config.maptilerApiKey}`;
   }
 
-  // 2. High-performance CARTO Vector GL Style with authenticated Basemaps key
-  if (config.basemapsApiKey) {
-    return `https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json?api_key=${config.basemapsApiKey}`;
-  }
-
-  return getFallbackRasterStyle(null);
+  // Fallback: OpenStreetMap raster tiles (no API key needed)
+  return {
+    version: 8,
+    sources: {
+      'osm-raster': {
+        type: 'raster',
+        tiles: [
+          'https://a.tile.openstreetmap.org/{z}/{x}/{y}.png',
+          'https://b.tile.openstreetmap.org/{z}/{x}/{y}.png',
+          'https://c.tile.openstreetmap.org/{z}/{x}/{y}.png',
+        ],
+        tileSize: 256,
+        attribution:
+          '© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>',
+      },
+    },
+    layers: [
+      {
+        id: 'osm-raster-layer',
+        type: 'raster',
+        source: 'osm-raster',
+        minzoom: 0,
+        maxzoom: 19,
+      },
+    ],
+  };
 }
 
 function getLevelColor(level) {
@@ -88,7 +79,6 @@ export default function MapView({
 }) {
   const mapContainerRef = useRef(null);
   const mapRef = useRef(null);
-  const fallbackAppliedRef = useRef(false);
 
   // Markers refs
   const originMarkerRef = useRef(null);
@@ -130,7 +120,7 @@ export default function MapView({
   }, []);
 
   // -----------------------------------------------------------------
-  // Initialize MapLibre map instance
+  // Initialize MapLibre map instance with MapTiler
   // -----------------------------------------------------------------
   useEffect(() => {
     if (!mapContainerRef.current || mapRef.current) return;
@@ -149,23 +139,6 @@ export default function MapView({
 
     // Add navigation control
     map.addControl(new maplibregl.NavigationControl({ showCompass: true }), 'top-right');
-
-    // Handle style load errors by falling back gracefully to CartoDB Voyager
-    map.on('error', (e) => {
-      if (
-        !fallbackAppliedRef.current &&
-        (e?.error?.status === 403 ||
-          e?.error?.status === 400 ||
-          (e?.error && String(e.error).toLowerCase().includes('style')))
-      ) {
-        fallbackAppliedRef.current = true;
-        try {
-          map.setStyle(getFallbackRasterStyle(config.basemapsApiKey));
-        } catch {
-          // ignore
-        }
-      }
-    });
 
     map.on('load', () => {
       setMapLoaded(true);

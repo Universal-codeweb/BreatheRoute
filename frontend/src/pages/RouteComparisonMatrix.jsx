@@ -17,6 +17,7 @@ export default function RouteComparisonMatrix({
   _error = null,
   onBackToMap,
   onSelectRoute,
+  onProfileChange,
 }) {
   const [activeProfile, setActiveProfile] = useState(profile || 'general');
 
@@ -87,7 +88,6 @@ export default function RouteComparisonMatrix({
           </div>
           <h1
             className="text-[36px] md:text-[50px] leading-[1.08] text-primary font-bold tracking-tight"
-            style={{ fontFamily: '"Space Grotesk", sans-serif' }}
           >
             Compare Your <span className="italic font-normal text-secondary">Routes</span>
           </h1>
@@ -126,7 +126,7 @@ export default function RouteComparisonMatrix({
                   <button
                     key={p.id}
                     type="button"
-                    onClick={() => setActiveProfile(p.id)}
+                    onClick={() => { setActiveProfile(p.id); if (onProfileChange) onProfileChange(p.id); }}
                     className={`px-space-md py-space-xs rounded-xl font-label-md text-label-md transition-all flex items-center gap-space-xs cursor-pointer ${
                       isActive
                         ? 'bg-primary-container text-on-primary-container font-semibold shadow-sm'
@@ -216,7 +216,6 @@ export default function RouteComparisonMatrix({
                     </span>
                     <h3
                       className="text-[22px] text-on-surface font-bold tracking-tight"
-                      style={{ fontFamily: '"Space Grotesk", sans-serif' }}
                     >
                       ⚡ {fastestRoute.label || 'Fastest Route'}
                     </h3>
@@ -339,7 +338,6 @@ export default function RouteComparisonMatrix({
                     </span>
                     <h3
                       className="text-[22px] text-primary font-bold tracking-tight"
-                      style={{ fontFamily: '"Space Grotesk", sans-serif' }}
                     >
                       🌱 {recommendedRoute.label || 'Cleanest Route'}
                     </h3>
@@ -453,7 +451,6 @@ export default function RouteComparisonMatrix({
                     </span>
                     <h3
                       className="text-[22px] text-[#0f766e] font-bold tracking-tight"
-                      style={{ fontFamily: '"Space Grotesk", sans-serif' }}
                     >
                       🌿 {alternativeRoute.label || 'Ultra Clean'}
                     </h3>
@@ -559,7 +556,6 @@ export default function RouteComparisonMatrix({
           <div>
             <h2
               className="text-[26px] md:text-[30px] leading-tight text-primary font-bold tracking-tight"
-              style={{ fontFamily: 'Newsreader, Georgia, serif' }}
             >
               Granular Sensor &amp; <span className="italic font-normal text-secondary">Exposure Analysis</span>
             </h2>

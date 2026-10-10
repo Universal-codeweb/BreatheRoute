@@ -217,7 +217,6 @@ export default function ActiveLiveNavigation({
               </div>
               <h2
                 className="text-[20px] leading-tight text-on-surface truncate font-semibold mt-0.5"
-                style={{ fontFamily: 'Newsreader, Georgia, serif' }}
               >
                 Continue straight under mature tree canopy
               </h2>
@@ -336,7 +335,6 @@ export default function ActiveLiveNavigation({
             </div>
             <h3
               className="text-[28px] font-bold text-primary"
-              style={{ fontFamily: 'Newsreader, Georgia, serif' }}
             >
               Journey Completed!
             </h3>

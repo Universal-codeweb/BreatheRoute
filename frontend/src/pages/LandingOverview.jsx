@@ -222,8 +222,6 @@ export default function LandingOverview({
 
                 className="text-[44px] md:text-[56px] lg:text-[62px] text-on-surface leading-[1.08] tracking-[-0.03em] font-normal"
 
-                style={{ fontFamily: 'Newsreader, Georgia, serif' }}
-
               >
 
                 Find the{' '}
@@ -249,8 +247,6 @@ export default function LandingOverview({
                   letterSpacing: '-0.01em',
 
                   lineHeight: '1.65',
-
-                  fontFamily: '"Plus Jakarta Sans", sans-serif',
 
                 }}
 
@@ -546,7 +542,7 @@ export default function LandingOverview({
 
                     <path d="M 40 380 Q 180 320 280 350 T 560 300" opacity="0.6" stroke="#0284c7" strokeLinecap="round" strokeWidth="28" />
 
-                    <text fill="#0369a1" fontFamily="Manrope" fontSize="11" fontWeight="600" x="190" y="330">Riparian Stream Corridor</text>
+                    <text fill="#0369a1" fontFamily="Plus Jakarta Sans" fontSize="11" fontWeight="600" x="190" y="330">Riparian Stream Corridor</text>
 
                     <circle cx="480" cy="90" fill="#dcfce7" opacity="0.9" r="70" />
 
@@ -578,7 +574,7 @@ export default function LandingOverview({
 
                     <circle cx="80" cy="280" fill="#ffffff" r="5" />
 
-                    <text fill="#14532d" fontFamily="Manrope" fontSize="12" fontWeight="700" x="70" y="260">Origin</text>
+                    <text fill="#14532d" fontFamily="Plus Jakarta Sans" fontSize="12" fontWeight="700" x="70" y="260">Origin</text>
 
 
 
@@ -586,7 +582,7 @@ export default function LandingOverview({
 
                     <circle cx="520" cy="120" fill="#ffffff" r="5" />
 
-                    <text fill="#14532d" fontFamily="Manrope" fontSize="12" fontWeight="700" x="470" y="105">Destination</text>
+                    <text fill="#14532d" fontFamily="Plus Jakarta Sans" fontSize="12" fontWeight="700" x="470" y="105">Destination</text>
 
                   </svg>
 
@@ -794,8 +790,6 @@ export default function LandingOverview({
 
                 className="text-[34px] md:text-[40px] text-on-surface mt-1.5 leading-[1.15] tracking-[-0.03em] font-bold"
 
-                style={{ fontFamily: '"Space Grotesk", sans-serif' }}
-
               >
 
                 Smarter streets for <span className="text-secondary">sensitive lungs</span>.
@@ -820,7 +814,7 @@ export default function LandingOverview({
 
             {/* Card 1 */}
 
-            <div className="bg-surface-container-lowest p-space-lg rounded-2xl shadow-sm hover:shadow-lg transition-all flex flex-col justify-between group border border-[#a7f3d0]/70 hover:border-[#4ade80]">
+            <div className="bg-surface-container-lowest p-space-lg rounded-2xl shadow-sm hover:shadow-lg card-interactive flex flex-col justify-between group border border-[#a7f3d0]/70 hover:border-[#4ade80]" role="button" tabIndex={0} onClick={() => onNavigate && onNavigate('map-explorer')} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onNavigate && onNavigate('map-explorer'); } }}>
 
               <div className="flex flex-col gap-space-md">
 
@@ -862,7 +856,7 @@ export default function LandingOverview({
 
             {/* Card 2 */}
 
-            <div className="bg-surface-container-lowest p-space-lg rounded-2xl shadow-sm hover:shadow-lg transition-all flex flex-col justify-between group border border-[#d9f99d]/70 hover:border-[#a3e635]">
+            <div className="bg-surface-container-lowest p-space-lg rounded-2xl shadow-sm hover:shadow-lg card-interactive flex flex-col justify-between group border border-[#d9f99d]/70 hover:border-[#a3e635]" role="button" tabIndex={0} onClick={() => onNavigate && onNavigate('route-planner', 1)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onNavigate && onNavigate('route-planner', 1); } }}>
 
               <div className="flex flex-col gap-space-md">
 
@@ -904,7 +898,7 @@ export default function LandingOverview({
 
             {/* Card 3 */}
 
-            <div className="bg-surface-container-lowest p-space-lg rounded-2xl shadow-sm hover:shadow-lg transition-all flex flex-col justify-between group border border-[#a7f3d0]/70 hover:border-[#4ade80]">
+            <div className="bg-surface-container-lowest p-space-lg rounded-2xl shadow-sm hover:shadow-lg card-interactive flex flex-col justify-between group border border-[#a7f3d0]/70 hover:border-[#4ade80]" role="button" tabIndex={0} onClick={() => onNavigate && onNavigate('route-planner', 3)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onNavigate && onNavigate('route-planner', 3); } }}>
 
               <div className="flex flex-col gap-space-md">
 
@@ -969,8 +963,6 @@ export default function LandingOverview({
               <h3
 
                 className="text-[28px] md:text-[32px] text-on-surface mt-1 tracking-[-0.03em] leading-tight font-bold"
-
-                style={{ fontFamily: '"Space Grotesk", sans-serif' }}
 
               >
 
@@ -1248,8 +1240,6 @@ export default function LandingOverview({
 
               className="text-[32px] md:text-[38px] text-primary font-bold mt-1 tracking-tight"
 
-              style={{ fontFamily: '"Space Grotesk", sans-serif' }}
-
             >
 
               How BreatheRoute Works
@@ -1268,7 +1258,7 @@ export default function LandingOverview({
 
           <div className="grid grid-cols-1 md:grid-cols-4 gap-space-md">
 
-            <div className="bg-white p-space-md rounded-2xl shadow-sm border border-[#dcfce7] flex flex-col justify-between">
+            <div className="bg-white p-space-md rounded-2xl shadow-sm hover:shadow-md hover:border-[#4ade80] card-interactive border border-[#dcfce7] flex flex-col justify-between" role="button" tabIndex={0} onClick={() => onNavigate && onNavigate('route-planner', 1)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onNavigate && onNavigate('route-planner', 1); } }}>
 
               <div>
 
@@ -1294,7 +1284,7 @@ export default function LandingOverview({
 
 
 
-            <div className="bg-white p-space-md rounded-2xl shadow-sm border border-[#dcfce7] flex flex-col justify-between">
+            <div className="bg-white p-space-md rounded-2xl shadow-sm hover:shadow-md hover:border-[#4ade80] card-interactive border border-[#dcfce7] flex flex-col justify-between" role="button" tabIndex={0} onClick={() => onNavigate && onNavigate('route-planner', 2)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onNavigate && onNavigate('route-planner', 2); } }}>
 
               <div>
 
@@ -1320,7 +1310,7 @@ export default function LandingOverview({
 
 
 
-            <div className="bg-white p-space-md rounded-2xl shadow-sm border border-[#dcfce7] flex flex-col justify-between">
+            <div className="bg-white p-space-md rounded-2xl shadow-sm hover:shadow-md hover:border-[#4ade80] card-interactive border border-[#dcfce7] flex flex-col justify-between" role="button" tabIndex={0} onClick={() => onNavigate && onNavigate('map-explorer')} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onNavigate && onNavigate('map-explorer'); } }}>
 
               <div>
 
@@ -1346,7 +1336,7 @@ export default function LandingOverview({
 
 
 
-            <div className="bg-white p-space-md rounded-2xl shadow-sm border border-[#dcfce7] flex flex-col justify-between">
+            <div className="bg-white p-space-md rounded-2xl shadow-sm hover:shadow-md hover:border-[#4ade80] card-interactive border border-[#dcfce7] flex flex-col justify-between" role="button" tabIndex={0} onClick={() => onNavigate && onNavigate('active-navigation')} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onNavigate && onNavigate('active-navigation'); } }}>
 
               <div>
 

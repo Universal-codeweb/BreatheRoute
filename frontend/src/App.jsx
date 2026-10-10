@@ -27,16 +27,17 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('landing');
 
   // ---- route search inputs ----
-  const [origin, setOrigin]           = useState(null); // { lat, lng, label }
+  const [origin, setOrigin] = useState(null); // { lat, lng, label }
   const [destination, setDestination] = useState(null); // { lat, lng, label }
-  const [mode, setMode]               = useState('walking');
-  const [profile, setProfile]         = useState('general');
+  const [mode, setMode] = useState('walking');
+  const [profile, setProfile] = useState('general');
+  const [plannerStep, setPlannerStep] = useState(1);
 
   // ---- route results from the API ----
-  const [routes, setRoutes]                   = useState([]);
+  const [routes, setRoutes] = useState([]);
   const [selectedRouteId, setSelectedRouteId] = useState(null);
-  const [loading, setLoading]                 = useState(false);
-  const [error, setError]                     = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
 
   // Track whether user has searched at least once (for auto re-search)
   const hasSearched = useRef(false);
@@ -156,13 +157,52 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  // Generic navigation used by Header / Footer / Landing cards
+  const goTo = (tab, step) => {
+    if (tab === 'route-planner') setPlannerStep(step || 1);
+    if (tab === 'map-explorer' && routes.length === 0 && origin && destination) {
+      findRoutes();
+      return;
+    }
+    setActiveTab(tab);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  // Friendly empty state for pages that need routes first
+  const EmptyState = ({ icon, title, text }) => (
+    <div className="flex-1 flex items-center justify-center px-6 py-20">
+      <div className="max-w-md w-full text-center bg-white rounded-3xl border border-[#a7f3d0]/70 shadow-xl p-10">
+        <div className="mx-auto w-16 h-16 rounded-2xl bg-[#dcfce7] text-[#15803d] flex items-center justify-center mb-5 border border-[#86efac]">
+          <span className="material-symbols-outlined text-[32px]">{icon}</span>
+        </div>
+        <h2 className="text-[24px] font-bold text-[#14532d] tracking-tight">{title}</h2>
+        <p className="text-on-surface-variant mt-2 mb-6 leading-relaxed">{text}</p>
+        <div className="flex flex-col sm:flex-row gap-3 justify-center">
+          <button
+            onClick={() => goTo('route-planner', 1)}
+            className="inline-flex items-center justify-center gap-2 h-12 px-6 rounded-xl bg-[#14532d] hover:bg-[#166534] text-white font-semibold shadow-md"
+          >
+            <span className="material-symbols-outlined text-[18px]">alt_route</span>
+            Plan a route
+          </button>
+          <button
+            onClick={() => goTo('landing')}
+            className="inline-flex items-center justify-center h-12 px-6 rounded-xl bg-[#ecfdf5] border border-[#a7f3d0] text-[#14532d] font-semibold hover:bg-[#d1fae5]"
+          >
+            Back to overview
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
   // ---------------------------------------------------------------
   // Setup-needed notice if env vars are missing
   // ---------------------------------------------------------------
   if (!config.isConfigured) {
     return (
       <div className="min-h-screen bg-surface flex flex-col font-body-md text-on-surface antialiased selection:bg-secondary-container selection:text-on-secondary-container">
-        <Header activeTab={activeTab} setActiveTab={setActiveTab} />
+        <Header activeTab={activeTab} setActiveTab={setActiveTab} onNavigate={goTo} profile={profile} />
         <div className="flex-1 flex items-center justify-center p-space-xl">
           <div className="max-w-lg bg-surface-container-lowest rounded-2xl p-space-xl shadow-lg border border-outline-variant/40 text-center">
             <span className="material-symbols-outlined text-[48px] text-error mb-space-md block">
@@ -183,16 +223,13 @@ export default function App() {
               <p className={config.apiUrl ? 'text-secondary' : 'text-error font-bold'}>
                 {config.apiUrl ? '✓' : '✗'} VITE_API_URL
               </p>
-              <p className={config.awsRegion ? 'text-secondary' : 'text-error font-bold'}>
-                {config.awsRegion ? '✓' : '✗'} VITE_AWS_REGION
-              </p>
-              <p className={config.locationApiKey ? 'text-secondary' : 'text-error font-bold'}>
-                {config.locationApiKey ? '✓' : '✗'} VITE_LOCATION_API_KEY
+              <p className={config.maptilerApiKey ? 'text-secondary' : 'text-error font-bold'}>
+                {config.maptilerApiKey ? '✓' : '✗'} VITE_MAPTILER_API_KEY
               </p>
             </div>
           </div>
         </div>
-        <Footer setActiveTab={setActiveTab} />
+        <Footer setActiveTab={setActiveTab} onNavigate={goTo} />
       </div>
     );
   }
@@ -203,7 +240,7 @@ export default function App() {
   return (
     <div className="min-h-screen bg-surface flex flex-col font-body-md text-on-surface antialiased selection:bg-secondary-container selection:text-on-secondary-container">
       {/* Persistent App Header */}
-      <Header activeTab={activeTab} setActiveTab={setActiveTab} />
+      <Header activeTab={activeTab} setActiveTab={setActiveTab} onNavigate={goTo} profile={profile} />
 
       {/* Main View Router with Craft-style 200ms fade + 8px slide-up transition */}
       <main className="flex-1 w-full flex flex-col">
@@ -219,6 +256,7 @@ export default function App() {
               onStartPlanning={handleStartPlanning}
               onExploreMap={handleExploreMap}
               onFindRoutes={findRoutes}
+              onNavigate={goTo}
               routes={routes}
               loading={loading}
               error={error}
@@ -227,6 +265,7 @@ export default function App() {
 
           {activeTab === 'route-planner' && (
             <RoutePlanning
+              initialStep={plannerStep}
               origin={origin}
               setOrigin={setOrigin}
               destination={destination}
@@ -263,8 +302,13 @@ export default function App() {
             />
           )}
 
-          {activeTab === 'route-comparison' && (
+          {activeTab === 'route-comparison' && routes.length === 0 && (
+            <EmptyState icon="balance" title="Nothing to compare yet" text="Pick a start and destination first. We'll score every route by air quality, time and traffic so you can compare them side by side." />
+          )}
+
+          {activeTab === 'route-comparison' && routes.length > 0 && (
             <RouteComparisonMatrix
+              onProfileChange={setProfile}
               routes={routes}
               selectedRouteId={selectedRouteId}
               setSelectedRouteId={setSelectedRouteId}
@@ -278,7 +322,11 @@ export default function App() {
             />
           )}
 
-          {activeTab === 'active-navigation' && (
+          {activeTab === 'active-navigation' && routes.length === 0 && (
+            <EmptyState icon="navigation" title="No route to navigate" text="Plan a route first, then start live navigation with clean-air guidance along the way." />
+          )}
+
+          {activeTab === 'active-navigation' && routes.length > 0 && (
             <ActiveLiveNavigation
               route={selectedRoute}
               routes={routes}
@@ -291,8 +339,8 @@ export default function App() {
       </main>
 
       {/* Footer on non-immersive screens */}
-      {activeTab !== 'active-navigation' && (
-        <Footer setActiveTab={setActiveTab} />
+      {!(activeTab === 'active-navigation' && routes.length > 0) && (
+        <Footer setActiveTab={setActiveTab} onNavigate={goTo} />
       )}
     </div>
   );

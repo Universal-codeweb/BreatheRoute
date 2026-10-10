@@ -1,0 +1,15 @@
+{
+  "name": "breatheroute-backend",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "BreatheRoute backend API server — routing, AQI grid, and route explanations",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.21.0"
+  }
+}

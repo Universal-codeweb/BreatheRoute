@@ -21,19 +21,17 @@ function parseBounds(str) {
 const config = {
   // Required values
   apiUrl:         import.meta.env.VITE_API_URL || '',
-  awsRegion:      import.meta.env.VITE_AWS_REGION || '',
-  locationApiKey: import.meta.env.VITE_LOCATION_API_KEY || '',
+  maptilerApiKey: import.meta.env.VITE_MAPTILER_API_KEY || '',
 
   // Optional values with defaults
-  basemapsApiKey: import.meta.env.VITE_BASEMAPS_API_KEY || 'cb1_4f6z_1_bbd50a0e8c12f2499411dcdd',
   mapCenter: parseCenter(import.meta.env.VITE_MAP_CENTER),
   mapZoom:   Number(import.meta.env.VITE_MAP_ZOOM) || 13,
   demoBounds: parseBounds(import.meta.env.VITE_DEMO_BOUNDS),
 };
 
-// True when all three required env vars are set
+// True when both required env vars are set
 config.isConfigured = Boolean(
-  config.apiUrl && config.awsRegion && config.locationApiKey
+  config.apiUrl && config.maptilerApiKey
 );
 
 export default config;

@@ -24,8 +24,9 @@ export default function RoutePlanning({
   onProceedToMap,
   onProceedToComparison,
   onStartNavigation,
+  initialStep = 1,
 }) {
-  const [currentStep, setCurrentStep] = useState(1);
+  const [currentStep, setCurrentStep] = useState(initialStep);
   const [pickMode, setPickMode] = useState(null); // 'origin' | 'destination' | null
   const [previewSelectedId, setPreviewSelectedId] = useState(null);
 
@@ -110,7 +111,6 @@ export default function RoutePlanning({
             </div>
             <p
               className="text-[26px] md:text-[30px] font-bold text-primary tracking-tight leading-snug"
-              style={{ fontFamily: 'Newsreader, Georgia, serif' }}
             >
               Plan Your <span className="italic font-semibold text-secondary">Healthy Journey</span>
             </p>
@@ -198,7 +198,6 @@ export default function RoutePlanning({
               </span>
               <h2
                 className="text-[36px] md:text-[44px] leading-[1.12] text-primary tracking-tight mt-1"
-                style={{ fontFamily: 'Newsreader, Georgia, serif' }}
               >
                 Where do you <span className="font-semibold italic text-secondary">want to wander?</span>
               </h2>
@@ -320,7 +319,6 @@ export default function RoutePlanning({
               </span>
               <h2
                 className="text-[34px] md:text-[40px] leading-[1.15] text-primary tracking-tight mt-1 font-bold"
-                style={{ fontFamily: 'Newsreader, Georgia, serif' }}
               >
                 How are you travelling?
               </h2>
@@ -430,7 +428,6 @@ export default function RoutePlanning({
               </span>
               <h2
                 className="text-[34px] md:text-[40px] leading-[1.15] text-primary tracking-tight mt-1 font-bold"
-                style={{ fontFamily: 'Newsreader, Georgia, serif' }}
               >
                 What matters most to you?
               </h2>
@@ -486,7 +483,6 @@ export default function RoutePlanning({
                 </span>
                 <h2
                   className="text-[32px] md:text-[38px] text-primary tracking-tight font-bold"
-                  style={{ fontFamily: 'Newsreader, Georgia, serif' }}
                 >
                   Your <span className="italic font-semibold text-secondary">Optimized Corridors</span>
                 </h2>

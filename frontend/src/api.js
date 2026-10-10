@@ -1,7 +1,11 @@
 // src/api.js
 // ------------------------------------------------------------------
-// Real-only data-fetching layer for BreatheRoute.
-// Three functions, all real network calls. No mock data.
+// Data-fetching layer for BreatheRoute.
+//
+// Three functions, all real network calls:
+//   1. getRoutes     — POST /routes to our backend
+//   2. getAqiGrid    — GET  /aqi from our backend
+//   3. searchPlaces  — MapTiler Geocoding API for place search
 // ------------------------------------------------------------------
 
 import config from './config';
@@ -11,7 +15,6 @@ const TIMEOUT_MS = 25000;
 
 /**
  * Fetch helper with timeout and JSON error handling.
- * The backend sends { error: "message" } on failure.
  */
 async function fetchWithTimeout(url, options = {}) {
   const controller = new AbortController();
@@ -60,33 +63,31 @@ export async function getAqiGrid() {
 }
 
 // ------------------------------------------------------------------
-// 3) Amazon Location Service — search places by text
-//    POST https://places.geo.{region}.amazonaws.com/v2/search-text
+// 3) MapTiler Geocoding API — search places by text
+//    https://api.maptiler.com/geocoding/{query}.json?key={key}
 // ------------------------------------------------------------------
 export async function searchPlaces(query, bias) {
-  const url =
-    'https://places.geo.' +
-    config.awsRegion +
-    '.amazonaws.com/v2/search-text?key=' +
-    config.locationApiKey;
+  if (!config.maptilerApiKey) {
+    throw new Error('MapTiler API key is not configured.');
+  }
 
-  const body = { QueryText: query, MaxResults: 5 };
+  let url =
+    `https://api.maptiler.com/geocoding/${encodeURIComponent(query)}.json` +
+    `?key=${config.maptilerApiKey}` +
+    `&limit=5` +
+    `&language=en`;
 
   // Optional: bias results toward a specific point
   if (bias) {
-    body.BiasPosition = [bias.lng, bias.lat]; // [lng, lat]
+    url += `&proximity=${bias.lng},${bias.lat}`;
   }
 
-  const data = await fetchWithTimeout(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
+  const data = await fetchWithTimeout(url);
 
-  // Map AWS response items to a simple { label, lat, lng } shape
-  return (data.ResultItems || []).map((item) => ({
-    label: item.Title,
-    lng: item.Position[0],
-    lat: item.Position[1],
+  // Map MapTiler GeoJSON response features to a simple { label, lat, lng } shape
+  return (data.features || []).map((feature) => ({
+    label: feature.place_name || feature.text || 'Unknown',
+    lng: feature.center[0],
+    lat: feature.center[1],
   }));
 }

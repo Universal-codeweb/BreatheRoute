@@ -24,10 +24,13 @@ const NAV_LINKS = [
 ];
 
 const PLAN_DROPDOWN_ITEMS = [
-  { label: 'Search a route', desc: 'Find clean air corridors', icon: 'search' },
-  { label: 'Health profile', desc: 'Asthma, child, elderly & general', icon: 'health_and_safety' },
-  { label: 'Preview', desc: 'Inspect conditions on map', icon: 'visibility' },
+  { label: 'Search a route', desc: 'Find clean air corridors', icon: 'search', tab: 'route-planner', step: 1 },
+  { label: 'Travel mode', desc: 'Walking or cycling', icon: 'directions_walk', tab: 'route-planner', step: 2 },
+  { label: 'Health profile', desc: 'Asthma, child, elderly & general', icon: 'health_and_safety', tab: 'route-planner', step: 3 },
+  { label: 'Preview', desc: 'Inspect conditions on map', icon: 'visibility', tab: 'map-explorer' },
 ];
+
+const PROFILE_LABELS = { general: 'General', asthma: 'Asthma', elderly: 'Elderly', child: 'Child' };
 
 function getLevel(aqi) {
   if (aqi <= 50) return 'clean';
@@ -36,7 +39,7 @@ function getLevel(aqi) {
   return 'poor';
 }
 
-export default function Header({ activeTab, setActiveTab }) {
+export default function Header({ activeTab, setActiveTab, onNavigate, profile }) {
   // Scroll frosted state
   const [isScrolled, setIsScrolled] = useState(false);
 
@@ -171,11 +174,15 @@ export default function Header({ activeTab, setActiveTab }) {
     }, 180);
   };
 
-  const handleNavClick = (id) => {
-    setActiveTab(id);
+  const handleNavClick = (id, step) => {
     setMobileMenuOpen(false);
     setDropdownOpen(false);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    if (onNavigate) {
+      onNavigate(id, step);
+    } else {
+      setActiveTab(id);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
   };
 
   const aqiLevel = avgAqi !== null ? getLevel(avgAqi) : null;
@@ -205,7 +212,6 @@ export default function Header({ activeTab, setActiveTab }) {
             />
             <span
               className="text-[20px] text-primary tracking-[-0.03em] font-bold select-none leading-none"
-              style={{ fontFamily: '"Plus Jakarta Sans", sans-serif' }}
             >
               Breathe<span className="text-secondary font-semibold italic">Route</span>
             </span>
@@ -303,7 +309,7 @@ export default function Header({ activeTab, setActiveTab }) {
                         <button
                           key={idx}
                           role="menuitem"
-                          onClick={() => handleNavClick('route-planner')}
+                          onClick={() => handleNavClick(item.tab, item.step)}
                           className="w-full text-left p-2.5 rounded-xl hover:bg-[#ecfdf5] transition-colors group flex items-start gap-2.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-secondary"
                         >
                           <div className="w-7 h-7 rounded-lg bg-surface-container flex items-center justify-center text-primary group-hover:bg-[#166534] group-hover:text-white transition-colors flex-shrink-0 mt-0.5">
@@ -331,10 +337,17 @@ export default function Header({ activeTab, setActiveTab }) {
 
         {/* Right: Low Exposure Pref badge + Theme Toggle + CTA */}
         <div className="flex items-center gap-space-sm flex-shrink-0">
-          <div className="hidden sm:flex items-center gap-space-xs px-space-sm py-1 rounded-full bg-secondary-container/60 text-on-secondary-container hover:bg-secondary-container transition-all">
+          <button
+            type="button"
+            onClick={() => handleNavClick('route-planner', 3)}
+            title="Change your health profile"
+            className="hidden sm:flex items-center gap-space-xs px-space-sm py-1 rounded-full bg-secondary-container/60 text-on-secondary-container hover:bg-secondary-container transition-all"
+          >
             <span className="material-symbols-outlined text-[16px]">eco</span>
-            <span className="font-label-md text-label-md font-semibold">Low Exposure Pref</span>
-          </div>
+            <span className="font-label-md text-label-md font-semibold">
+              {PROFILE_LABELS[profile] || 'General'} profile
+            </span>
+          </button>
 
           <button
             onClick={() => handleNavClick('route-planner')}
@@ -386,7 +399,7 @@ export default function Header({ activeTab, setActiveTab }) {
             : 'opacity-0 -translate-y-3 max-h-0 pointer-events-none'
           }`}
       >
-        <div className="px-margin py- space-y-2 max-h-[calc(85vh-32px)] overflow-y-auto">
+        <div className="px-margin py-3 space-y-2 max-h-[calc(85vh-32px)] overflow-y-auto">
           {NAV_LINKS.map((link, idx) => {
             const isActive = activeTab === link.id;
             return (

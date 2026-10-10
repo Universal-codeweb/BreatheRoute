@@ -167,7 +167,6 @@ export default function MainRouteResultsMap({
                   <span className="font-label-md text-[11px] text-on-surface-variant uppercase tracking-wider font-semibold">From:</span>
                   <span
                     className="text-[17px] font-semibold text-on-surface truncate tracking-tight"
-                    style={{ fontFamily: 'Newsreader, Georgia, serif' }}
                   >
                     {origin?.label || 'Click to select start location'}
                   </span>
@@ -310,7 +309,6 @@ export default function MainRouteResultsMap({
                 <div className="mt-1 flex items-baseline gap-1">
                   <span
                     className="text-[30px] font-semibold text-white leading-none tabular-nums"
-                    style={{ fontFamily: 'Newsreader, Georgia, serif' }}
                   >
                     {selectedRoute?.durationMinutes || 22}
                   </span>
@@ -341,7 +339,6 @@ export default function MainRouteResultsMap({
                 <div className="mt-1 flex items-baseline gap-1">
                   <span
                     className="text-[30px] font-semibold text-[#dce9ff] leading-none tabular-nums"
-                    style={{ fontFamily: 'Newsreader, Georgia, serif' }}
                   >
                     {fastestRoute?.durationMinutes || 17}
                   </span>
@@ -368,7 +365,6 @@ export default function MainRouteResultsMap({
               <p className="text-[13px] text-[#f8f9ff] leading-relaxed">
                 <span
                   className="italic text-[15px] font-medium text-[#bdedd2]"
-                  style={{ fontFamily: 'Newsreader, Georgia, serif' }}
                 >
                   5 min longer
                 </span>{' '}
@@ -426,14 +422,12 @@ export default function MainRouteResultsMap({
                   <div className="flex items-baseline justify-between mt-space-xs">
                     <h3
                       className="text-[24px] font-semibold text-on-surface leading-tight tracking-tight"
-                      style={{ fontFamily: 'Newsreader, Georgia, serif' }}
                     >
                       {r.label}
                     </h3>
                     <div className="flex items-baseline gap-1">
                       <span
                         className="text-[28px] font-semibold text-primary leading-none tabular-nums"
-                        style={{ fontFamily: 'Newsreader, Georgia, serif' }}
                       >
                         {r.durationMinutes}
                       </span>
@@ -472,7 +466,6 @@ export default function MainRouteResultsMap({
                       </span>
                       <span
                         className="italic text-[15px] text-secondary font-medium"
-                        style={{ fontFamily: 'Newsreader, Georgia, serif' }}
                       >
                         {isClean ? 'Minimal Respiratory Load' : 'Elevated Soot Exposure'}
                       </span>
@@ -481,7 +474,6 @@ export default function MainRouteResultsMap({
                       <div
                         className="w-11 h-11 rounded-full bg-secondary-container flex items-center justify-center text-on-secondary-container text-[20px] font-bold tabular-nums"
                         style={{
-                          fontFamily: 'Newsreader, Georgia, serif',
                           border: '1.5px solid rgb(136, 215, 165)',
                         }}
                       >
