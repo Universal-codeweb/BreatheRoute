@@ -25,6 +25,8 @@ $$\text{Score} = (w_{\text{aqi}} \cdot \text{AQI}) + (w_{\text{traffic}} \cdot \
 
 ## 3. Architecture
 
+The diagram below shows the optional AWS deployment design. The runnable local app uses OpenFreeMap for map tiles, Photon for place search, and Valhalla for walk/cycle routing, with no mapping API key required.
+
 ```text
                                   +-----------------------+
                                   |  Amazon EventBridge   |
@@ -62,7 +64,8 @@ $$\text{Score} = (w_{\text{aqi}} \cdot \text{AQI}) + (w_{\text{traffic}} \cdot \
 | **Amazon API Gateway** | Provides secure, managed REST API endpoints connecting frontend clients to backend Lambdas. |
 | **AWS Lambda** | Serverless compute executing `getRoutes`, `getAqiGrid`, `explainRoute`, `setAqi`, and `refreshAqi`. |
 | **Amazon DynamoDB** | Low-latency NoSQL database storing AQI grid tiles, traffic metrics, and cached path data. |
-| **Amazon Location Service** | Delivers map tiles, geocoding/places search, and pedestrian/cyclist route calculation. |
+| **OpenFreeMap, Photon, Valhalla** | Keyless local map tiles, place search, and pedestrian/cyclist route calculation. |
+| **Amazon Location Service** | Optional provider for an AWS-hosted deployment. |
 | **Amazon Bedrock** | Generative AI foundation models generating route health insights and plain-language comparisons. |
 | **Amazon EventBridge** | Automated cron scheduler triggering `refreshAqi` on an hourly cadence. |
 | **Amazon CloudWatch** | Aggregates application logs, performance metrics, and operational alarms. |
@@ -93,7 +96,7 @@ copy env.example .env
 npm run dev
 ```
 
-Set `MAPTILER_API_KEY` in `backend/.env`. This API uses Valhalla for walk/cycle routes and returns clearly labeled deterministic AQI/traffic estimates until a live data provider is connected.
+This API uses Valhalla for walk/cycle routes and Photon for free place search. AQI/traffic values are clearly labeled deterministic estimates until a live data provider is connected.
 
 ### Start the frontend
 
@@ -107,10 +110,10 @@ Set `MAPTILER_API_KEY` in `backend/.env`. This API uses Valhalla for walk/cycle 
    npm install
    ```
 
-3. Copy `.env.example` to `.env.local` and set your MapTiler API key:
+3. Copy `.env.example` to `.env.local`:
    ```env
-   VITE_MAPTILER_API_KEY=your_maptiler_api_key
    VITE_API_URL=http://localhost:3001/api
+   VITE_MAP_STYLE_URL=https://tiles.openfreemap.org/styles/liberty
    ```
 
 4. Start the development server:

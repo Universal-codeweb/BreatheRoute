@@ -3,7 +3,7 @@
 // Production PlaceInput component for BreatheRoute.
 //
 // Key features:
-// - Debounced place search via the backend's MapTiler integration
+// - Debounced place search via the backend's Photon integration
 // - "Pick on map" crosshair mode integration
 // - "Use my location" via navigator.geolocation.getCurrentPosition
 // - Coverage bounds check with warning badge if coordinates fall outside

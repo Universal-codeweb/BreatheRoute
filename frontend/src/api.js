@@ -59,7 +59,7 @@ export async function getAqiGrid() {
 }
 
 // ------------------------------------------------------------------
-// 3) GET /places — search places through the backend's MapTiler integration
+// 3) GET /places — search places through the backend's Photon integration
 // ------------------------------------------------------------------
 export async function searchPlaces(query, bias) {
   const params = new URLSearchParams({ q: query });

@@ -3,7 +3,6 @@ import { createServer } from 'node:http';
 const PORT = Number(process.env.PORT) || 3001;
 const API_PREFIX = '/api';
 const ROUTING_API_URL = process.env.ROUTING_API_URL || 'https://valhalla1.openstreetmap.de/route';
-const MAPTILER_API_KEY = process.env.MAPTILER_API_KEY || '';
 const MAP_CENTER = parsePair(process.env.MAP_CENTER, [78.07, 11.1]);
 const DEMO_BOUNDS = parseBounds(process.env.DEMO_BOUNDS) || {
   west: MAP_CENTER[0] - 0.2,
@@ -266,24 +265,32 @@ async function getRoutes(body) {
 }
 
 async function searchPlaces(url) {
-  if (!MAPTILER_API_KEY) throw new Error('MapTiler search is not configured. Set MAPTILER_API_KEY in backend/.env.');
   const query = url.searchParams.get('q')?.trim();
   if (!query || query.length < 2 || query.length > 160) throw new Error('q must contain between 2 and 160 characters.');
 
-  const geocodeUrl = new URL(`https://api.maptiler.com/geocoding/${encodeURIComponent(query)}.json`);
-  geocodeUrl.searchParams.set('key', MAPTILER_API_KEY);
+  const geocodeUrl = new URL('https://photon.komoot.io/api/');
+  geocodeUrl.searchParams.set('q', query);
   geocodeUrl.searchParams.set('limit', '5');
-  geocodeUrl.searchParams.set('autocomplete', 'true');
   const proximity = url.searchParams.get('proximity');
   if (proximity && /^-?\d+(\.\d+)?,-?\d+(\.\d+)?$/.test(proximity)) {
-    geocodeUrl.searchParams.set('proximity', proximity);
+    const [lon, lat] = proximity.split(',');
+    geocodeUrl.searchParams.set('lon', lon);
+    geocodeUrl.searchParams.set('lat', lat);
   }
 
   const result = await fetchJson(geocodeUrl);
   return (result.features || []).flatMap((feature) => {
-    const coordinates = feature.center || feature.geometry?.coordinates;
+    const coordinates = feature.geometry?.coordinates;
     if (!Array.isArray(coordinates) || coordinates.length < 2) return [];
-    return [{ label: feature.place_name || feature.text || query, lng: coordinates[0], lat: coordinates[1] }];
+    const properties = feature.properties || {};
+    const label = [
+      properties.name,
+      properties.street,
+      properties.city || properties.county,
+      properties.state,
+      properties.country,
+    ].filter((part, index, parts) => part && parts.indexOf(part) === index).join(', ');
+    return [{ label: label || query, lng: coordinates[0], lat: coordinates[1] }];
   });
 }
 
@@ -293,7 +300,7 @@ const server = createServer(async (request, response) => {
 
   try {
     if (url.pathname === `${API_PREFIX}/health` && request.method === 'GET') {
-      return jsonResponse(response, 200, { status: 'ok', routing: 'Valhalla', map: 'MapTiler' });
+      return jsonResponse(response, 200, { status: 'ok', routing: 'Valhalla', map: 'OpenFreeMap', search: 'Photon' });
     }
     if (url.pathname === `${API_PREFIX}/aqi` && request.method === 'GET') {
       const cells = createAqiCells();

@@ -3,7 +3,7 @@
 // Production MapView component using MapLibre GL.
 //
 // Key capabilities:
-// - MapTiler Streets vector style
+// - OpenFreeMap Liberty vector style
 // - Segment lines colored by AQI level (thick selected route with
 //   white casing, dashed fastest, muted alternatives)
 // - Origin and Destination custom markers with pulsing status rings
@@ -21,7 +21,7 @@ import { getAqiGrid } from '../api';
 import { LEVEL_COLORS } from '../utils/colors';
 
 function getMapStyleUrl() {
-  return `https://api.maptiler.com/maps/${encodeURIComponent(config.maptilerStyleId)}/style.json?key=${encodeURIComponent(config.maptilerApiKey)}`;
+  return config.mapStyleUrl;
 }
 
 function getLevelColor(level) {
