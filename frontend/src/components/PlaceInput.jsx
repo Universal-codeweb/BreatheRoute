@@ -3,7 +3,7 @@
 // Production PlaceInput component for BreatheRoute.
 //
 // Key features:
-// - Debounced live place search via Amazon Location Service (searchPlaces)
+// - Debounced place search via the backend's MapTiler integration
 // - "Pick on map" crosshair mode integration
 // - "Use my location" via navigator.geolocation.getCurrentPosition
 // - Coverage bounds check with warning badge if coordinates fall outside
@@ -60,7 +60,7 @@ export default function PlaceInput({
     return () => document.removeEventListener('mousedown', handleOutsideClick);
   }, []);
 
-  // Debounced search logic calling real AWS Location Service
+  // Debounced search logic calling the backend place-search endpoint
   const handleInputChange = (e) => {
     const text = e.target.value;
     setQuery(text);
@@ -252,7 +252,7 @@ export default function PlaceInput({
         </p>
       )}
 
-      {/* Dropdown Suggestions List (Real Amazon Location Service items only) */}
+      {/* Dropdown suggestions returned by the place-search API */}
       {isOpen && query.length >= 2 && (
         <div className="absolute top-full left-0 right-0 mt-1.5 z-40 bg-surface-container-lowest rounded-2xl shadow-xl border border-surface-container overflow-hidden max-h-64 overflow-y-auto animate-in fade-in slide-in-from-top-1 duration-150">
           {suggestions.length > 0 ? (

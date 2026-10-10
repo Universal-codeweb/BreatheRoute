@@ -1,7 +1,6 @@
 // src/api.js
 // ------------------------------------------------------------------
-// Real-only data-fetching layer for BreatheRoute.
-// Three functions, all real network calls. No mock data.
+// Data-fetching layer for the BreatheRoute API.
 // ------------------------------------------------------------------
 
 import config from './config';
@@ -60,33 +59,11 @@ export async function getAqiGrid() {
 }
 
 // ------------------------------------------------------------------
-// 3) Amazon Location Service — search places by text
-//    POST https://places.geo.{region}.amazonaws.com/v2/search-text
+// 3) GET /places — search places through the backend's MapTiler integration
 // ------------------------------------------------------------------
 export async function searchPlaces(query, bias) {
-  const url =
-    'https://places.geo.' +
-    config.awsRegion +
-    '.amazonaws.com/v2/search-text?key=' +
-    config.locationApiKey;
-
-  const body = { QueryText: query, MaxResults: 5 };
-
-  // Optional: bias results toward a specific point
-  if (bias) {
-    body.BiasPosition = [bias.lng, bias.lat]; // [lng, lat]
-  }
-
-  const data = await fetchWithTimeout(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
-
-  // Map AWS response items to a simple { label, lat, lng } shape
-  return (data.ResultItems || []).map((item) => ({
-    label: item.Title,
-    lng: item.Position[0],
-    lat: item.Position[1],
-  }));
+  const params = new URLSearchParams({ q: query });
+  if (bias) params.set('proximity', `${bias.lng},${bias.lat}`);
+  const data = await fetchWithTimeout(`${config.apiUrl}/places?${params}`);
+  return Array.isArray(data.places) ? data.places : [];
 }

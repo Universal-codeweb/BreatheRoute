@@ -233,19 +233,21 @@ Sequential navigation instructions with:
 ## Getting Started
 
 ### Prerequisites
-- **Node.js** >= 18.x
+- **Node.js** >= 22.12
 - **npm** >= 9.x
 
 ### Installation
 
 ```bash
-# Clone the repository
-git clone <repository-url>
-cd BreathRoute_Frontend/frontend
+# Configure the frontend
+copy .env.example .env.local
+# Set VITE_MAPTILER_API_KEY in .env.local
 
 # Install dependencies
 npm install
 ```
+
+Start the API in a second terminal from `../backend` with `npm run dev`.
 
 ### Development Server
 
@@ -253,7 +255,7 @@ npm install
 npm run dev
 ```
 
-The app will start at `http://localhost:5173` with hot module replacement (HMR) enabled.
+The app will start at `http://localhost:5173` with hot module replacement (HMR) enabled. The API defaults to `http://localhost:3001/api`.
 
 ---
 
@@ -281,9 +283,9 @@ npm run preview
 The production build generates optimized, minified assets in the `dist/` directory, ready for deployment to any static hosting service (Vercel, Netlify, Firebase Hosting, GitHub Pages, etc.).
 
 ### Environment Notes
-- All fonts and icons are loaded via Google CDN — no local font files required
-- No environment variables needed for the current mock-data configuration
-- When connecting to a real backend, replace the mock data exports in `src/data/routeData.js` with API calls
+- Map tiles and place search use MapTiler; set `VITE_MAPTILER_API_KEY` in `.env.local`.
+- Route calculation and AQI estimates are served by the local API in `../backend`.
+- AQI and traffic are deterministic demo estimates, not live measurements.
 
 ---
 
@@ -291,9 +293,9 @@ The production build generates optimized, minified assets in the `dist/` directo
 
 | Integration | Status | Notes |
 |---|---|---|
-| Live AQI API | 🔜 Planned | Replace `SENSOR_NODES` with real-time API polling |
-| Map Provider (Mapbox/Leaflet) | 🔜 Planned | Replace SVG canvas with interactive map tiles |
-| Backend Routing Engine | 🔜 Planned | Compute routes server-side with AQI-weighted pathfinding |
+| Live AQI API | 🔜 Planned | Replace deterministic estimates with sensor data |
+| Map Provider | ✅ Implemented | MapTiler Streets rendered with MapLibre GL |
+| Backend Routing Engine | ✅ Implemented | Valhalla walking/cycling routes scored by profile |
 | User Authentication | 🔜 Planned | Save route preferences and commute history |
 | Push Notifications | 🔜 Planned | AQI alerts and route condition changes |
 

@@ -77,7 +77,7 @@ BreatheRoute/
 ├── frontend/        # React application (Vite, interactive map, health profile selector)
 ├── route-engine/    # Route calculation, scoring engine, and Amazon Bedrock integration Lambda
 ├── aqi-traffic/     # AQI grid data ingestion and traffic simulation Lambdas
-├── backend/         # API Gateway definitions, DynamoDB schemas, and backend configurations
+├── backend/         # Local Node.js API for routing, AQI estimates, and place search
 └── docs/            # Project documentation, architecture diagrams, and submission assets
 ```
 
@@ -85,9 +85,19 @@ BreatheRoute/
 
 ## 6. How to Run
 
-### Frontend Setup
+### Start the backend
 
-1. Navigate to the frontend directory:
+```bash
+cd backend
+copy env.example .env
+npm run dev
+```
+
+Set `MAPTILER_API_KEY` in `backend/.env`. This API uses Valhalla for walk/cycle routes and returns clearly labeled deterministic AQI/traffic estimates until a live data provider is connected.
+
+### Start the frontend
+
+1. In a second terminal, navigate to the frontend directory:
    ```bash
    cd frontend
    ```
@@ -97,11 +107,10 @@ BreatheRoute/
    npm install
    ```
 
-3. Configure environment variables in `.env`:
+3. Copy `.env.example` to `.env.local` and set your MapTiler API key:
    ```env
-   VITE_LOCATION_API_KEY=your_amazon_location_api_key
-   VITE_AWS_REGION=us-east-1
-   VITE_API_URL=https://your-api-id.execute-api.us-east-1.amazonaws.com/prod
+   VITE_MAPTILER_API_KEY=your_maptiler_api_key
+   VITE_API_URL=http://localhost:3001/api
    ```
 
 4. Start the development server:

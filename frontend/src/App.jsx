@@ -172,8 +172,7 @@ export default function App() {
               Setup needed
             </h1>
             <p className="font-body-md text-body-md text-on-surface-variant mb-space-lg">
-              BreatheRoute requires environment variables to connect to the backend
-              and map services. Create a{' '}
+              BreatheRoute needs a MapTiler key and a running backend. Create a{' '}
               <code className="font-data-badge bg-surface-container px-1 py-0.5 rounded">.env</code>{' '}
               file based on{' '}
               <code className="font-data-badge bg-surface-container px-1 py-0.5 rounded">.env.example</code>{' '}
@@ -183,11 +182,8 @@ export default function App() {
               <p className={config.apiUrl ? 'text-secondary' : 'text-error font-bold'}>
                 {config.apiUrl ? '✓' : '✗'} VITE_API_URL
               </p>
-              <p className={config.awsRegion ? 'text-secondary' : 'text-error font-bold'}>
-                {config.awsRegion ? '✓' : '✗'} VITE_AWS_REGION
-              </p>
-              <p className={config.locationApiKey ? 'text-secondary' : 'text-error font-bold'}>
-                {config.locationApiKey ? '✓' : '✗'} VITE_LOCATION_API_KEY
+              <p className={config.maptilerApiKey ? 'text-secondary' : 'text-error font-bold'}>
+                {config.maptilerApiKey ? '✓' : '✗'} VITE_MAPTILER_API_KEY
               </p>
             </div>
           </div>
