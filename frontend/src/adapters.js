@@ -67,7 +67,7 @@ export function toUiRoute(r, recommendedRouteId, fastestRouteId) {
  * Convert the full API response into an array of UI routes.
  */
 export function convertAllRoutes(apiResponse) {
-  const { recommendedRouteId, fastestRouteId, routes = [] } = apiResponse || {};
+  const { recommendedRouteId, fastestRouteId, routes = [], aegisAnalysis = null } = apiResponse || {};
 
   const uiRoutes = routes.map((r) =>
     toUiRoute(r, recommendedRouteId, fastestRouteId)
@@ -77,5 +77,6 @@ export function convertAllRoutes(apiResponse) {
     routes: uiRoutes,
     recommendedId: recommendedRouteId,
     fastestId: fastestRouteId,
+    aegisAnalysis,
   };
 }

@@ -65,6 +65,7 @@ export default function App() {
   // ---- route results from the API ----
   const [routes, setRoutes] = useState([]);
   const [selectedRouteId, setSelectedRouteId] = useState(null);
+  const [aegisAnalysis, setAegisAnalysis] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
@@ -95,9 +96,10 @@ export default function App() {
         profile
       );
 
-      const { routes: uiRoutes, recommendedId } = convertAllRoutes(apiResponse);
+      const { routes: uiRoutes, recommendedId, aegisAnalysis: aiReport } = convertAllRoutes(apiResponse);
       setRoutes(uiRoutes);
       setSelectedRouteId(recommendedId);
+      setAegisAnalysis(aiReport);
       hasSearched.current = true;
 
       if (navigateToMap) {
@@ -309,6 +311,7 @@ export default function App() {
               setOrigin={setOrigin}
               destination={destination}
               setDestination={setDestination}
+              aegisAnalysis={aegisAnalysis}
               loading={loading}
               error={error}
               onFindRoutes={findRoutes}
@@ -331,6 +334,7 @@ export default function App() {
               origin={origin}
               destination={destination}
               profile={profile}
+              aegisAnalysis={aegisAnalysis}
               loading={loading}
               error={error}
               onBackToMap={handleExploreMap}

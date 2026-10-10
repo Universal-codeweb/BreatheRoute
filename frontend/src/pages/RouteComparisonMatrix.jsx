@@ -30,6 +30,7 @@ export default function RouteComparisonMatrix({
   origin,
   destination,
   profile = 'general',
+  aegisAnalysis = null,
   _loading = false,
   _error = null,
   onBackToMap,
@@ -38,6 +39,7 @@ export default function RouteComparisonMatrix({
   onProfileChange,
 }) {
   const [activeProfile, setActiveProfile] = useState(profile || 'general');
+  const [showFullAiReport, setShowFullAiReport] = useState(false);
 
   // Identify recommended (cleanest), fastest, and alternative routes
   const recommendedRoute =
@@ -218,6 +220,73 @@ export default function RouteComparisonMatrix({
           </div>
         </div>
       </div>
+
+      {/* Aegis Route AI Health Intelligence Advisory */}
+      {aegisAnalysis && (
+        <div className="rounded-2xl p-space-md md:p-space-lg bg-surface-container-lowest border border-[#86efac]/80 shadow-md">
+          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-space-md pb-space-sm border-b border-[#a7f3d0]/40">
+            <div className="flex items-center gap-space-sm">
+              <div className="w-10 h-10 rounded-xl bg-[#065f46] text-white flex items-center justify-center shadow">
+                <span className="material-symbols-outlined text-[22px]">health_and_safety</span>
+              </div>
+              <div>
+                <div className="flex items-center gap-space-xs">
+                  <span className="text-[12px] font-bold text-[#065f46] uppercase tracking-wider">
+                    Aegis Route AI Health Advisory
+                  </span>
+                  <span className="px-2 py-0.5 text-[11px] font-semibold rounded-full bg-[#dcfce7] text-[#15803d] border border-[#86efac]">
+                    {aegisAnalysis.source === 'gemini-ai' ? 'Live Gemini AI' : 'Aegis Intelligence'}
+                  </span>
+                </div>
+                <h3 className="text-[18px] font-bold text-[#14532d]">
+                  Personalized Environmental Exposure Analysis
+                </h3>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-space-md">
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[#ecfdf5] border border-[#a7f3d0]">
+                <span className="text-xs text-[#166534] font-medium">Safety Score:</span>
+                <span className="text-base font-extrabold text-[#15803d]">
+                  {aegisAnalysis.aqiSafetyScore ?? 85}/100
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowFullAiReport((prev) => !prev)}
+                className="text-xs font-semibold text-[#065f46] hover:underline flex items-center gap-1 cursor-pointer"
+              >
+                <span>{showFullAiReport ? 'Hide Full Report' : 'View Full Report'}</span>
+                <span className="material-symbols-outlined text-[16px]">
+                  {showFullAiReport ? 'expand_less' : 'expand_more'}
+                </span>
+              </button>
+            </div>
+          </div>
+
+          {/* Warnings List */}
+          {Array.isArray(aegisAnalysis.healthWarnings) && aegisAnalysis.healthWarnings.length > 0 && (
+            <div className="mt-space-sm flex flex-wrap gap-2">
+              {aegisAnalysis.healthWarnings.map((warning, idx) => (
+                <div
+                  key={idx}
+                  className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-[#fef2f2] border border-[#fecaca] text-[#991b1b] text-xs font-medium"
+                >
+                  <span className="material-symbols-outlined text-[14px]">warning</span>
+                  <span>{warning}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Collapsible Full Markdown Report */}
+          {showFullAiReport && aegisAnalysis.rawReport && (
+            <div className="mt-space-md p-space-md bg-surface-container-low rounded-xl border border-outline-variant/30 text-sm leading-relaxed text-on-surface whitespace-pre-line font-mono">
+              {aegisAnalysis.rawReport}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* 3-Route Side-by-Side Cards (Grid) */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-space-md">

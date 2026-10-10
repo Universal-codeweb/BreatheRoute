@@ -1,4 +1,5 @@
 import { createServer } from 'node:http';
+import { analyzeRoutesWithAi } from './aegisAi.mjs';
 
 const PORT = Number(process.env.PORT) || 3001;
 const API_PREFIX = '/api';
@@ -253,25 +254,40 @@ async function getRoutes(body) {
   const recommended = scoredRoutes.reduce((best, route) => route.score > best.score ? route : best);
   const fastest = scoredRoutes.reduce((best, route) => route.durationMin < best.durationMin ? route : best);
 
+  let aegisAnalysis = null;
+  try {
+    aegisAnalysis = await analyzeRoutesWithAi({
+      origin,
+      destination,
+      mode,
+      profile,
+      routes: scoredRoutes,
+    });
+  } catch (err) {
+    console.error('Aegis AI analysis error:', err.message);
+  }
+
   return {
     mode,
     profile,
     routeCount: scoredRoutes.length,
-    recommendedRouteId: recommended.id,
+    recommendedRouteId: aegisAnalysis?.recommendedRouteId || recommended.id,
     fastestRouteId: fastest.id,
     scoringMethod: {
       scale: '0-100; higher is better',
-      note: 'Experimental route preference score based on deterministic AQI and traffic estimates, not live sensor data or medical guidance.',
+      note: 'Evaluated by Aegis Route AI health navigation engine.',
     },
     aqiIsLive: false,
     trafficIsLive: false,
+    aegisAnalysis,
     routes: scoredRoutes,
   };
 }
 
 async function searchPlaces(url) {
   const query = url.searchParams.get('q')?.trim();
-  if (!query || query.length < 2 || query.length > 160) throw new Error('q must contain between 2 and 160 characters.');
+  if (!query || query.length < 2) return [];
+  if (query.length > 160) throw new Error('q must contain at most 160 characters.');
 
   const geocodeUrl = new URL('https://photon.komoot.io/api/');
   geocodeUrl.searchParams.set('q', query);
@@ -283,20 +299,25 @@ async function searchPlaces(url) {
     geocodeUrl.searchParams.set('lat', lat);
   }
 
-  const result = await fetchJson(geocodeUrl);
-  return (result.features || []).flatMap((feature) => {
-    const coordinates = feature.geometry?.coordinates;
-    if (!Array.isArray(coordinates) || coordinates.length < 2) return [];
-    const properties = feature.properties || {};
-    const label = [
-      properties.name,
-      properties.street,
-      properties.city || properties.county,
-      properties.state,
-      properties.country,
-    ].filter((part, index, parts) => part && parts.indexOf(part) === index).join(', ');
-    return [{ label: label || query, lng: coordinates[0], lat: coordinates[1] }];
-  });
+  try {
+    const result = await fetchJson(geocodeUrl);
+    return (result.features || []).flatMap((feature) => {
+      const coordinates = feature.geometry?.coordinates;
+      if (!Array.isArray(coordinates) || coordinates.length < 2) return [];
+      const properties = feature.properties || {};
+      const label = [
+        properties.name,
+        properties.street,
+        properties.city || properties.county,
+        properties.state,
+        properties.country,
+      ].filter((part, index, parts) => part && parts.indexOf(part) === index).join(', ');
+      return [{ label: label || query, lng: coordinates[0], lat: coordinates[1] }];
+    });
+  } catch (err) {
+    console.error('Photon search failed:', err.message);
+    return [];
+  }
 }
 
 const server = createServer(async (request, response) => {
@@ -304,10 +325,12 @@ const server = createServer(async (request, response) => {
   if (request.method === 'OPTIONS') return jsonResponse(response, 204, {});
 
   try {
-    if (url.pathname === `${API_PREFIX}/health` && request.method === 'GET') {
+    const routePath = url.pathname.replace(/^\/api(?=\/|$)/, '') || '/';
+
+    if (routePath === '/health' && request.method === 'GET') {
       return jsonResponse(response, 200, { status: 'ok', routing: 'Valhalla', map: 'OpenFreeMap', search: 'Photon' });
     }
-    if (url.pathname === `${API_PREFIX}/aqi` && request.method === 'GET') {
+    if (routePath === '/aqi' && request.method === 'GET') {
       const cells = createAqiCells();
       return jsonResponse(response, 200, {
         cells,
@@ -316,11 +339,15 @@ const server = createServer(async (request, response) => {
         isLive: false,
       });
     }
-    if (url.pathname === `${API_PREFIX}/places` && request.method === 'GET') {
+    if (routePath === '/places' && request.method === 'GET') {
       return jsonResponse(response, 200, { places: await searchPlaces(url) });
     }
-    if (url.pathname === `${API_PREFIX}/routes` && request.method === 'POST') {
+    if (routePath === '/routes' && request.method === 'POST') {
       return jsonResponse(response, 200, await getRoutes(await readJson(request)));
+    }
+    if (routePath === '/aegis-analyze' && request.method === 'POST') {
+      const payload = await readJson(request);
+      return jsonResponse(response, 200, await analyzeRoutesWithAi(payload));
     }
     return jsonResponse(response, 404, { error: 'Endpoint not found.' });
   } catch (error) {
