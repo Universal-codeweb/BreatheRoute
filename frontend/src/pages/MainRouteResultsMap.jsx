@@ -1,12 +1,112 @@
 // src/pages/MainRouteResultsMap.jsx
 // ------------------------------------------------------------------
-// BreatheRoute Main Route Results Map Page
-// Aligned with Stitch main_route_results_map UI.
+// Full-height interactive Map Explorer with modern floating glass UI.
+// Features:
+// - Full-height MapLibre map as base canvas (fast, no re-mounts)
+// - Top-left floating glass search card (origin, destination, swap, find routes)
+// - Floating left results panel (desktop sidebar / mobile bottom sheet)
+// - Route cards with AqiBadge, time, distance, and LEVEL_COLORS exposure bar
+// - "Why this route?" highlight computed from existing route telemetry
+// - Bottom-left floating AQI legend with grid toggle
+// - Loading Skeleton, ErrorState, and EmptyState handling
 // ------------------------------------------------------------------
 
 import React, { useState } from 'react';
 import MapView from '../components/MapView';
 import PlaceInput from '../components/PlaceInput';
+import {
+  Card,
+  Button,
+  AqiBadge,
+  Badge,
+  Skeleton,
+  ErrorState,
+  EmptyState,
+} from '../components/ui';
+import { LEVEL_COLORS } from '../utils/colors';
+
+// Helper to compute horizontal exposure distribution bar
+function getExposureSegments(route) {
+  if (Array.isArray(route.segments) && route.segments.length > 0) {
+    const total = route.segments.length;
+    let clean = 0;
+    let moderate = 0;
+    let high = 0;
+    let poor = 0;
+
+    route.segments.forEach((s) => {
+      const a = s.aqi || route.avgAqi || 50;
+      if (a <= 50) clean++;
+      else if (a <= 100) moderate++;
+      else if (a <= 150) high++;
+      else poor++;
+    });
+
+    return [
+      { level: 'clean', pct: Math.round((clean / total) * 100), color: LEVEL_COLORS.clean },
+      { level: 'moderate', pct: Math.round((moderate / total) * 100), color: LEVEL_COLORS.moderate },
+      { level: 'high', pct: Math.round((high / total) * 100), color: LEVEL_COLORS.high },
+      { level: 'poor', pct: Math.round((poor / total) * 100), color: LEVEL_COLORS.poor },
+    ].filter((s) => s.pct > 0);
+  }
+
+  // Fallback distribution modeled from average AQI
+  const aqi = route.avgAqi || 50;
+  if (aqi <= 50) {
+    return [
+      { level: 'clean', pct: 85, color: LEVEL_COLORS.clean },
+      { level: 'moderate', pct: 15, color: LEVEL_COLORS.moderate },
+    ];
+  }
+  if (aqi <= 100) {
+    return [
+      { level: 'clean', pct: 40, color: LEVEL_COLORS.clean },
+      { level: 'moderate', pct: 50, color: LEVEL_COLORS.moderate },
+      { level: 'high', pct: 10, color: LEVEL_COLORS.high },
+    ];
+  }
+  if (aqi <= 150) {
+    return [
+      { level: 'clean', pct: 15, color: LEVEL_COLORS.clean },
+      { level: 'moderate', pct: 35, color: LEVEL_COLORS.moderate },
+      { level: 'high', pct: 40, color: LEVEL_COLORS.high },
+      { level: 'poor', pct: 10, color: LEVEL_COLORS.poor },
+    ];
+  }
+  return [
+    { level: 'clean', pct: 5, color: LEVEL_COLORS.clean },
+    { level: 'moderate', pct: 20, color: LEVEL_COLORS.moderate },
+    { level: 'high', pct: 35, color: LEVEL_COLORS.high },
+    { level: 'poor', pct: 40, color: LEVEL_COLORS.poor },
+  ];
+}
+
+// Helper to compute "Why this route?" line from existing data without inventing numbers
+function getWhyThisRoute(route, fastestRoute) {
+  if (!route.isRecommended) return null;
+
+  // Use explicit reason if supplied by API
+  if (route.reason && typeof route.reason === 'string' && route.reason.trim().length > 0) {
+    return route.reason;
+  }
+
+  // Otherwise compute real relative particulate reduction compared to fastest route
+  if (
+    fastestRoute &&
+    fastestRoute.id !== route.id &&
+    typeof fastestRoute.avgAqi === 'number' &&
+    typeof route.avgAqi === 'number' &&
+    fastestRoute.avgAqi > route.avgAqi
+  ) {
+    const diff = fastestRoute.avgAqi - route.avgAqi;
+    const reduction = Math.round((diff / fastestRoute.avgAqi) * 100);
+    if (reduction > 0) {
+      return `${reduction}% less pollution exposure than the fastest route`;
+    }
+  }
+
+  return null;
+}
 
 export default function MainRouteResultsMap({
   routes = [],
@@ -26,6 +126,7 @@ export default function MainRouteResultsMap({
   const [pickMode, setPickMode] = useState(null); // 'origin' | 'destination' | null
   const [showHeatmap, setShowHeatmap] = useState(true);
   const [searchExpanded, setSearchExpanded] = useState(false);
+  const [mobileSheetExpanded, setMobileSheetExpanded] = useState(true);
 
   // Active selected route object
   const selectedRoute =
@@ -34,17 +135,12 @@ export default function MainRouteResultsMap({
     routes[0] ||
     null;
 
-  // Fastest route
+  // Fastest route reference
   const fastestRoute =
     routes.find((r) => r.isFastest) ||
     routes.find((r) => r.id !== selectedRoute?.id) ||
     routes[1] ||
     null;
-  const selectedDuration = Number(selectedRoute?.durationMinutes ?? selectedRoute?.time);
-  const fastestDuration = Number(fastestRoute?.durationMinutes ?? fastestRoute?.time);
-  const timeDelta = Number.isFinite(selectedDuration) && Number.isFinite(fastestDuration)
-    ? Math.max(0, selectedDuration - fastestDuration).toFixed(1)
-    : null;
 
   // Swap endpoints
   const handleSwap = () => {
@@ -62,466 +158,499 @@ export default function MainRouteResultsMap({
     setPickMode(null);
   };
 
-  return (
-    <div className="w-full max-w-[1600px] mx-auto px-margin md:px-margin-tablet lg:px-margin-desktop py-space-md flex-1 flex flex-col gap-space-md">
-      {/* Data status and selected route estimates */}
-      <div className="flex flex-wrap items-center justify-between gap-space-sm mb-space-xs">
-        <div className="flex items-center gap-space-sm">
-          <span className="w-2.5 h-2.5 rounded-full bg-secondary" />
-          <span className="font-data-badge text-data-badge uppercase text-secondary font-bold tracking-wider">
-            Demo environmental estimates
-          </span>
-          <span className="font-body-sm text-body-sm text-on-surface-variant">
-            AQI and traffic are not live sensor readings
-          </span>
-        </div>
+  const handleSelect = (routeId) => {
+    if (setSelectedRouteId) setSelectedRouteId(routeId);
+    if (onSelectRoute) onSelectRoute(routeId);
+  };
 
-        <div className="flex items-center gap-space-sm flex-wrap">
-          <div className="flex items-center gap-space-xs px-space-sm py-1 bg-surface-container rounded-lg">
-            <span className="material-symbols-outlined text-[16px] text-on-surface-variant">air</span>
-            <span className="font-data-badge text-data-badge text-on-surface-variant">Route AQI: {selectedRoute?.avgAqi ?? '—'}</span>
-          </div>
-          <div className="flex items-center gap-space-xs px-space-sm py-1 bg-surface-container rounded-lg">
-            <span className="material-symbols-outlined text-[16px] text-on-surface-variant">traffic</span>
-            <span className="font-data-badge text-data-badge text-on-surface-variant">Traffic estimate: {selectedRoute?.traffic ?? '—'}</span>
-          </div>
-          <div className="flex items-center gap-space-xs px-space-sm py-1 bg-secondary-container/70 text-on-secondary-container rounded-lg">
-            <span className="material-symbols-outlined text-[16px]">info</span>
-            <span className="font-data-badge text-data-badge font-bold">Experimental score</span>
-          </div>
-        </div>
+  return (
+    <div className="relative w-full h-[calc(100vh-4rem)] overflow-hidden bg-slate-100 flex flex-col select-none">
+      {/* ============================================================
+          BASE LAYER: FULL-HEIGHT MAP CANVAS (Mounted once, no re-mounts)
+          ============================================================ */}
+      <div className="absolute inset-0 z-0">
+        <MapView
+          origin={origin}
+          destination={destination}
+          routes={routes}
+          selectedRouteId={selectedRoute?.id}
+          routeColorOverride="#15803d"
+          onSelectRoute={handleSelect}
+          pickMode={pickMode}
+          onPickLocation={handlePickLocation}
+          onCancelPick={() => setPickMode(null)}
+          showAqiGrid={showHeatmap}
+          onToggleAqiGrid={() => setShowHeatmap((prev) => !prev)}
+          className="w-full h-full"
+        />
       </div>
 
-      {error && (
-        <div className="bg-error-container/40 text-error p-space-sm rounded-xl border border-error/30 flex items-center gap-space-xs text-body-sm">
-          <span className="material-symbols-outlined text-[18px]">error</span>
-          <span>{error}</span>
+      {/* ============================================================
+          ACTIVE MAP PICK BANNER
+          ============================================================ */}
+      {pickMode && (
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-40 bg-white/95 backdrop-blur-md px-4 py-2.5 rounded-full border border-[#86efac] shadow-lift flex items-center gap-3 text-xs text-[#166534] animate-bounce-subtle">
+          <span className="material-symbols-outlined text-[18px] text-[#15803d]">
+            touch_app
+          </span>
+          <span>
+            Click anywhere on the map to set{' '}
+            <strong>{pickMode === 'origin' ? 'start location' : 'destination'}</strong>.
+          </span>
+          <button
+            type="button"
+            onClick={() => setPickMode(null)}
+            className="font-bold underline text-slate-700 hover:text-black cursor-pointer ml-1"
+          >
+            Cancel
+          </button>
         </div>
       )}
 
-      {/* Expandable Origin / Destination Search Bar */}
-      {searchExpanded && (
-        <div className="bg-surface-container-lowest rounded-2xl p-space-md shadow-md border border-[#a7f3d0] flex flex-col gap-space-sm">
+      {/* ============================================================
+          DESKTOP FLOATING LEFT SIDEBAR (Search Card + Results Panel)
+          ============================================================ */}
+      <div className="hidden sm:flex flex-col gap-3 absolute top-4 left-4 bottom-4 z-30 w-96 pointer-events-none">
+        {/* Top-Left Floating Glass Search Card */}
+        <Card
+          variant="glass"
+          p="sm"
+          className="pointer-events-auto border-white/80 shadow-lift flex flex-col gap-2.5 flex-shrink-0"
+        >
           <div className="flex items-center justify-between">
-            <span className="font-headline-sm text-[16px] font-bold text-primary">Edit Corridors</span>
-            <button
-              onClick={() => setSearchExpanded(false)}
-              className="text-on-surface-variant hover:text-on-surface p-1 cursor-pointer"
-            >
-              <span className="material-symbols-outlined text-[18px]">close</span>
-            </button>
+            <div className="flex items-center gap-1.5 text-xs font-bold font-mono uppercase tracking-wider text-[#15803d]">
+              <span className="w-2 h-2 rounded-full bg-[#15803d]" />
+              <span>Corridor Search</span>
+            </div>
+
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={handleSwap}
+                title="Swap origin and destination"
+                className="w-7 h-7 rounded-lg bg-white/80 hover:bg-white text-slate-700 flex items-center justify-center border border-slate-200 shadow-2xs transition-all active:scale-95 cursor-pointer"
+              >
+                <span className="material-symbols-outlined text-[16px]">swap_vert</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setSearchExpanded((prev) => !prev)}
+                title="Expand inputs"
+                className="w-7 h-7 rounded-lg bg-white/80 hover:bg-white text-slate-700 flex items-center justify-center border border-slate-200 shadow-2xs transition-all cursor-pointer"
+              >
+                <span className="material-symbols-outlined text-[16px]">
+                  {searchExpanded ? 'unfold_less' : 'unfold_more'}
+                </span>
+              </button>
+            </div>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-space-sm">
+
+          {/* PlaceInputs (Collapsible or compact view) */}
+          <div className="flex flex-col gap-2">
             <PlaceInput
-              label="Start Origin"
+              label="Starting Location"
+              placeholder="Start location..."
               value={origin}
               onChange={setOrigin}
               onPickOnMap={() => setPickMode('origin')}
               isPicking={pickMode === 'origin'}
-              placeholder="Search origin..."
             />
             <PlaceInput
-              label="Target Destination"
+              label="Destination"
+              placeholder="Target destination..."
               value={destination}
               onChange={setDestination}
               onPickOnMap={() => setPickMode('destination')}
               isPicking={pickMode === 'destination'}
-              placeholder="Search destination..."
-            />
-          </div>
-          <div className="flex justify-end gap-space-sm mt-1">
-            <button
-              onClick={() => {
-                setSearchExpanded(false);
-                onFindRoutes();
-              }}
-              disabled={loading || !origin || !destination}
-              className="px-space-md py-2 bg-[#14532d] hover:bg-[#166534] text-white rounded-xl font-label-md text-label-md font-semibold cursor-pointer shadow-md disabled:opacity-50"
-            >
-              Update Routes
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Master 2-Column Desktop Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-space-md min-h-[780px]">
-
-        {/* LEFT COLUMN: Interactive Map Explorer (col-span-8) */}
-        <div className="lg:col-span-8 flex flex-col relative rounded-2xl overflow-hidden bg-surface-container-low shadow-md min-h-[620px] lg:min-h-full border border-[#dcece2]">
-
-          {/* Floating Header Search & Waypoint Strip */}
-          <div
-            className="absolute top-space-md left-space-md right-space-md z-20 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-space-xs bg-surface-container-lowest/95 backdrop-blur-md p-space-xs rounded-xl shadow-md border border-[#a7f3d0]/60"
-            style={{
-              boxShadow: 'rgba(11, 28, 48, 0.12) 0px 16px 32px -4px, rgba(11, 28, 48, 0.06) 0px 6px 12px -2px',
-            }}
-          >
-            <div
-              onClick={() => setSearchExpanded(true)}
-              className="flex items-center gap-space-sm px-space-sm py-1.5 flex-1 min-w-0 cursor-pointer hover:bg-surface-container-low rounded-lg transition-colors"
-            >
-              <div className="flex flex-col items-center justify-center">
-                <span className="w-3 h-3 rounded-full bg-secondary" />
-                <span className="w-0.5 h-3 bg-outline-variant my-0.5" />
-                <span className="w-3 h-3 rounded-full bg-primary-container" />
-              </div>
-              <div className="flex flex-col min-w-0 flex-1">
-                <div className="flex items-center gap-space-xs">
-                  <span className="font-label-md text-[11px] text-on-surface-variant uppercase tracking-wider font-semibold">From:</span>
-                  <span
-                    className="text-[17px] font-semibold text-on-surface truncate tracking-tight"
-                  >
-                    {origin?.label || 'Click to select start location'}
-                  </span>
-                </div>
-                <div className="flex items-center gap-space-xs">
-                  <span className="font-label-md text-[11px] text-on-surface-variant uppercase tracking-wider font-semibold">To:</span>
-                  <span className="font-body-md text-[14px] text-on-surface font-semibold truncate">
-                    {destination?.label || 'Click to select target destination'}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-space-xs sm:self-center pr-space-xs">
-              <button
-                type="button"
-                onClick={() => setShowHeatmap(!showHeatmap)}
-                className={`flex items-center gap-space-xs px-space-md py-2 rounded-lg transition-all font-label-md text-label-md cursor-pointer ${
-                  showHeatmap
-                    ? 'bg-[#ecfdf5] border border-[#86efac] text-[#15803d] shadow-sm'
-                    : 'bg-surface-container text-on-surface-variant'
-                }`}
-              >
-                <span className="material-symbols-outlined text-[18px]">layers</span>
-                <span>AQI Layer: {showHeatmap ? 'ON' : 'OFF'}</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={handleSwap}
-                className="p-2 rounded-lg bg-surface-container hover:bg-surface-container-high transition-all text-on-surface cursor-pointer"
-                title="Swap Endpoints"
-              >
-                <span className="material-symbols-outlined text-[18px]">swap_vert</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setSearchExpanded(!searchExpanded)}
-                className="p-2 rounded-lg bg-surface-container hover:bg-surface-container-high transition-all text-on-surface cursor-pointer"
-                title="Edit Search"
-              >
-                <span className="material-symbols-outlined text-[18px]">edit</span>
-              </button>
-            </div>
-          </div>
-
-          {/* Interactive Map Canvas Container */}
-          <div className="w-full h-full min-h-[580px] flex-1 relative overflow-hidden bg-surface-dim/40">
-            <MapView
-              origin={origin}
-              destination={destination}
-              routes={routes}
-              selectedRouteId={selectedRoute?.id}
-              onSelectRoute={setSelectedRouteId}
-              pickMode={pickMode}
-              onPickLocation={handlePickLocation}
-              onCancelPick={() => setPickMode(null)}
-              showAqiGrid={showHeatmap}
-              onToggleAqiGrid={() => setShowHeatmap((visible) => !visible)}
-              className="w-full h-full"
             />
           </div>
 
-          {/* Bottom Map Legend & Scale Bar */}
-          <div
-            className="absolute bottom-space-md left-space-md right-space-md z-20 flex flex-wrap items-center justify-between gap-space-sm px-space-md py-space-xs rounded-xl shadow-md backdrop-blur-md"
-            style={{
-              background: 'rgba(255, 255, 255, 0.95)',
-              border: '1px solid rgba(134, 239, 172, 0.5)',
-              boxShadow: 'rgba(1, 45, 29, 0.12) 0px 12px 28px -4px',
-            }}
+          <Button
+            variant="primary"
+            size="sm"
+            icon="search"
+            loading={loading}
+            disabled={!origin || !destination}
+            onClick={() => onFindRoutes && onFindRoutes()}
+            className="w-full font-bold"
           >
-            <div className="flex items-center gap-space-md flex-wrap">
-              <span className="font-label-md text-label-md text-on-surface-variant font-semibold">
-                Atmospheric Exposure Index:
-              </span>
-              <div className="flex items-center gap-space-xs">
-                <span className="w-3 h-3 rounded-full bg-[#10B981]" />
-                <span className="font-data-badge text-data-badge text-on-surface">Good (0–50)</span>
-              </div>
-              <div className="flex items-center gap-space-xs">
-                <span className="w-3 h-3 rounded-full bg-[#EAB308]" />
-                <span className="font-data-badge text-data-badge text-on-surface">Moderate (51–100)</span>
-              </div>
-              <div className="flex items-center gap-space-xs">
-                <span className="w-3 h-3 rounded-full bg-[#F97316]" />
-                <span className="font-data-badge text-data-badge text-on-surface">High (101–150)</span>
-              </div>
-              <div className="flex items-center gap-space-xs">
-                <span className="w-3 h-3 rounded-full bg-[#EF4444]" />
-                <span className="font-data-badge text-data-badge text-on-surface">Poor (151–200+)</span>
-              </div>
-            </div>
+            {loading ? 'Analyzing Corridors…' : 'Find cleanest routes'}
+          </Button>
+        </Card>
 
-            <div className="flex items-center gap-space-sm">
-              <span className="font-data-badge text-data-badge text-on-surface-variant">GPS Accuracy: ±2.4m</span>
-              <span className="w-16 h-1 bg-outline-variant rounded-full relative">
-                <span className="absolute right-0 -top-3 font-data-badge text-[9px] text-on-surface-variant">500m</span>
-              </span>
-            </div>
-          </div>
-        </div>
-
-        {/* RIGHT COLUMN: Route Results & Details Panel (col-span-4) */}
-        <div className="lg:col-span-4 flex flex-col gap-space-md">
-
-          {/* INNOVATION SHOWCASE BANNER: Direct Visual Contrast */}
-          <div
-            className="rounded-2xl p-space-md shadow-md flex flex-col gap-space-sm text-white"
-            style={{
-              background: 'linear-gradient(135deg, rgb(1, 45, 29) 0%, rgb(15, 61, 42) 60%, rgb(3, 68, 85) 100%)',
-              border: '1px solid rgba(52, 211, 153, 0.3)',
-              boxShadow: 'rgba(1, 45, 29, 0.35) 0px 16px 30px -6px',
-            }}
+        {/* Floating Results Panel (Scrollable Card Container) */}
+        <div className="pointer-events-auto flex-1 min-h-0 flex flex-col gap-2.5 overflow-hidden">
+          <Card
+            variant="glass"
+            p="sm"
+            className="border-white/80 shadow-lift flex-1 min-h-0 flex flex-col overflow-hidden"
           >
-            <div className="flex items-center justify-between border-b border-white/10 pb-2.5">
-              <div className="flex items-center gap-space-xs">
-                <span className="material-symbols-outlined text-[17px] text-[#a4f4bf]">balance</span>
-                <span className="font-label-md text-[11px] uppercase tracking-[0.14em] text-[#a4f4bf] font-bold">
-                  Comparative Analysis
+            {/* Header / Route Count */}
+            <div className="flex items-center justify-between pb-2 border-b border-slate-200/60 flex-shrink-0">
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-800">
+                {routes.length > 0 ? `${routes.length} Corridors Found` : 'Route Options'}
+              </span>
+              {selectedRoute && (
+                <span className="text-[11px] font-mono font-semibold text-[#15803d]">
+                  Selected: {selectedRoute.label}
                 </span>
-              </div>
-              <span className="font-data-badge text-data-badge px-2.5 py-0.5 rounded-full bg-white/10 text-[#a2d1b6] border border-[#a4f4bf]/20 tabular-nums font-semibold">
-                {timeDelta === null ? 'No route comparison' : `Δ ${timeDelta} min vs fastest`}
-              </span>
+              )}
             </div>
 
-            <div className="grid grid-cols-2 gap-space-xs pt-1">
-              {/* Selected route card */}
-              <div
-                className="bg-white/10 rounded-xl p-2.5 flex flex-col"
-                style={{ border: '1px solid rgba(164, 244, 191, 0.25)' }}
-              >
-                <div className="flex items-center gap-1 text-[#a4f4bf]">
-                  <span className="material-symbols-outlined text-[15px]">eco</span>
-                  <span className="text-[12px] uppercase font-bold tracking-wider font-ui">Selected route</span>
+            {/* Scrollable Area */}
+            <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar py-2 space-y-2.5">
+              {/* Loading Skeleton */}
+              {loading && (
+                <div className="space-y-2.5">
+                  <Skeleton variant="card" className="h-28 rounded-2xl" />
+                  <Skeleton variant="card" className="h-28 rounded-2xl" />
+                  <Skeleton variant="card" className="h-28 rounded-2xl" />
                 </div>
-                <div className="mt-1 flex items-baseline gap-1">
-                  <span
-                    className="text-[30px] font-semibold text-white leading-none tabular-nums"
-                  >
-                    {selectedRoute?.durationMinutes ?? selectedRoute?.time ?? '—'}
-                  </span>
-                  <span className="text-label-md font-medium text-[#7ba88f]">min</span>
-                  <span className="text-[13px] text-[#7ba88f] ml-1.5 tabular-nums">
-                    • {selectedRoute?.distanceKm ?? selectedRoute?.distance ?? '—'} km
-                  </span>
-                </div>
-                <div className="mt-1.5 flex items-center justify-between pt-1 border-t border-white/10">
-                  <span className="font-data-badge text-data-badge text-[#bdedd2] tabular-nums font-semibold">
-                    AQI est. {selectedRoute?.avgAqi ?? selectedRoute?.aqi ?? '—'}
-                  </span>
-                  <span className="font-data-badge text-[10px] bg-secondary px-1.5 py-0.5 rounded text-white font-bold tracking-wider uppercase tabular-nums">
-                    Score {selectedRoute?.healthScore ?? selectedRoute?.score ?? '—'}
-                  </span>
-                </div>
-              </div>
+              )}
 
-              {/* Fastest Card */}
-              <div
-                className="bg-white/5 rounded-xl p-2.5 flex flex-col"
-                style={{ border: '1px solid rgba(255, 255, 255, 0.1)' }}
-              >
-                <div className="flex items-center gap-1 text-[#c1c8c1]">
-                  <span className="material-symbols-outlined text-[15px]">bolt</span>
-                  <span className="text-[12px] uppercase font-bold tracking-wider font-ui">Fastest Route</span>
-                </div>
-                <div className="mt-1 flex items-baseline gap-1">
-                  <span
-                    className="text-[30px] font-semibold text-[#dce9ff] leading-none tabular-nums"
-                  >
-                    {fastestRoute?.durationMinutes ?? fastestRoute?.time ?? '—'}
-                  </span>
-                  <span className="text-label-md font-medium text-[#c1c8c1]">min</span>
-                  <span className="text-[13px] text-[#c1c8c1] ml-1.5 tabular-nums">
-                    • {fastestRoute?.distanceKm ?? fastestRoute?.distance ?? '—'} km
-                  </span>
-                </div>
-                <div className="mt-1.5 flex items-center justify-between pt-1 border-t border-white/10">
-                  <span className="font-data-badge text-data-badge text-[#ffdad6] tabular-nums font-semibold">
-                    AQI est. {fastestRoute?.avgAqi ?? fastestRoute?.aqi ?? '—'}
-                  </span>
-                  <span className="font-data-badge text-[10px] bg-white/15 px-1.5 py-0.5 rounded text-[#c1c8c1] font-bold tracking-wider uppercase tabular-nums">
-                    Score {fastestRoute?.healthScore ?? fastestRoute?.score ?? '—'}
-                  </span>
-                </div>
-              </div>
+              {/* Error State */}
+              {!loading && error && (
+                <ErrorState
+                  title="Route Calculation Failed"
+                  message={error}
+                  onRetry={onFindRoutes}
+                  retryText="Retry"
+                  className="p-4"
+                />
+              )}
+
+              {/* Empty State */}
+              {!loading && !error && routes.length === 0 && (
+                <EmptyState
+                  icon="alt_route"
+                  title="No corridors yet"
+                  description="Choose starting and destination waypoints to synthesize clean air routes."
+                  actionText="Find Routes"
+                  onAction={onFindRoutes}
+                  className="p-4"
+                />
+              )}
+
+              {/* Real Route Cards */}
+              {!loading &&
+                !error &&
+                routes.map((r) => {
+                  const isSelected = selectedRoute?.id === r.id;
+                  const whyLine = getWhyThisRoute(r, fastestRoute);
+                  const segments = getExposureSegments(r);
+
+                  // Tag determination
+                  let tag = 'Alternative';
+                  let tagVariant = 'default';
+                  if (r.isRecommended) {
+                    tag = 'Cleanest';
+                    tagVariant = 'mint';
+                  } else if (r.isFastest) {
+                    tag = 'Fastest';
+                    tagVariant = 'outline';
+                  } else if (r.healthScore && r.healthScore >= 80) {
+                    tag = 'Balanced';
+                    tagVariant = 'mint';
+                  }
+
+                  return (
+                    <Card
+                      key={r.id}
+                      variant={isSelected ? 'highlight' : 'default'}
+                      p="sm"
+                      interactive
+                      onClick={() => handleSelect(r.id)}
+                      className={`transition-all duration-150 border-slate-200/90 ${
+                        isSelected
+                          ? 'border-2 border-[#15803d] ring-2 ring-[#86efac]/50 shadow-soft'
+                          : 'hover:border-slate-300'
+                      }`}
+                    >
+                      <div className="flex flex-col gap-2">
+                        {/* Top: Tag + AQI Badge */}
+                        <div className="flex items-center justify-between">
+                          <Badge variant={tagVariant} size="sm">
+                            {tag}
+                          </Badge>
+                          <AqiBadge aqi={r.avgAqi} animated size="sm" />
+                        </div>
+
+                        {/* Middle: Route Name + Time & Distance */}
+                        <div className="flex items-baseline justify-between gap-2">
+                          <h3 className="font-bold text-sm text-slate-900 truncate">
+                            {r.label}
+                          </h3>
+                          <div className="flex items-baseline gap-1 font-mono text-xs flex-shrink-0">
+                            <span className="font-bold text-slate-900 text-sm">
+                              {r.durationMinutes || r.time} min
+                            </span>
+                            <span className="text-slate-400">·</span>
+                            <span className="text-slate-600">
+                              {r.distanceKm || r.distance} km
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Horizontal Exposure Distribution Bar */}
+                        <div className="flex flex-col gap-1 pt-0.5">
+                          <div className="h-1.5 w-full flex rounded-full overflow-hidden bg-slate-100 gap-0.5">
+                            {segments.map((seg, idx) => (
+                              <div
+                                key={`${seg.level}-${idx}`}
+                                style={{
+                                  width: `${seg.pct}%`,
+                                  backgroundColor: seg.color,
+                                }}
+                                title={`${seg.level}: ${seg.pct}%`}
+                              />
+                            ))}
+                          </div>
+                          <div className="flex items-center justify-between text-[10px] text-slate-500 font-mono">
+                            <span>Exposure profile</span>
+                            <span className="text-[#15803d] font-semibold">
+                              Score {r.healthScore || 85}/100
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* "Why this route?" line (strictly hidden if missing) */}
+                        {whyLine && (
+                          <div className="pt-2 border-t border-slate-200/60 flex items-start gap-1.5 text-[11px] text-[#15803d] font-medium leading-snug">
+                            <span className="material-symbols-outlined text-[14px] flex-shrink-0 mt-0.5">
+                              verified
+                            </span>
+                            <span>{whyLine}</span>
+                          </div>
+                        )}
+                      </div>
+                    </Card>
+                  );
+                })}
             </div>
 
-            <div className="flex items-start gap-space-xs mt-0.5 bg-white/10 p-2 rounded-xl">
-              <span className="material-symbols-outlined text-[16px] text-[#a4f4bf] flex-shrink-0 mt-0.5">
-                tips_and_updates
-              </span>
-              <p className="text-[13px] text-[#f8f9ff] leading-relaxed">
-                {selectedRoute
-                  ? `Selected route has an estimated AQI of ${selectedRoute.avgAqi ?? selectedRoute.aqi ?? '—'} and a profile score of ${selectedRoute.healthScore ?? selectedRoute.score ?? '—'}/100. These values are experimental estimates.`
-                  : 'Search for a route to compare its estimated AQI, traffic, and duration.'}
-              </p>
+            {/* Bottom Actions for Selected Route */}
+            {selectedRoute && (
+              <div className="pt-2.5 border-t border-slate-200/60 flex flex-col gap-2 flex-shrink-0">
+                <Button
+                  variant="primary"
+                  size="md"
+                  icon="navigation"
+                  iconPosition="right"
+                  onClick={() => onStartNavigation && onStartNavigation(selectedRoute.id)}
+                  className="w-full font-bold shadow-soft"
+                >
+                  Start navigation
+                </Button>
+
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  icon="balance"
+                  onClick={onGoToComparison}
+                  className="w-full font-semibold"
+                >
+                  Compare routes
+                </Button>
+              </div>
+            )}
+          </Card>
+        </div>
+      </div>
+
+      {/* ============================================================
+          BOTTOM-LEFT FLOATING LEGEND (Desktop & Mobile)
+          ============================================================ */}
+      <div className="absolute bottom-4 left-4 sm:left-[25.5rem] z-20 pointer-events-auto">
+        <Card
+          variant="glass"
+          p="sm"
+          className="border-white/80 shadow-lift flex flex-col sm:flex-row items-start sm:items-center gap-2.5 text-xs"
+        >
+          {/* Legend Items */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="font-bold text-slate-700 font-mono text-[11px] uppercase tracking-wider">
+              AQI Levels:
+            </span>
+            <div className="flex items-center gap-1">
+              <span
+                className="w-2.5 h-2.5 rounded-full"
+                style={{ backgroundColor: LEVEL_COLORS.clean }}
+              />
+              <span className="text-[11px] text-slate-700">Good</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <span
+                className="w-2.5 h-2.5 rounded-full"
+                style={{ backgroundColor: LEVEL_COLORS.moderate }}
+              />
+              <span className="text-[11px] text-slate-700">Moderate</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <span
+                className="w-2.5 h-2.5 rounded-full"
+                style={{ backgroundColor: LEVEL_COLORS.high }}
+              />
+              <span className="text-[11px] text-slate-700">High</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <span
+                className="w-2.5 h-2.5 rounded-full"
+                style={{ backgroundColor: LEVEL_COLORS.poor }}
+              />
+              <span className="text-[11px] text-slate-700">Poor</span>
             </div>
           </div>
 
-          {/* REAL ROUTE CARDS LIST */}
-          {routes.length > 0 ? (
-            routes.map((r) => {
-              const isSelected = selectedRoute?.id === r.id;
-              const isClean = r.isRecommended || r.avgAqi <= 70;
+          <div className="hidden sm:block h-3.5 w-px bg-slate-200" />
 
-              return (
-                <div
-                  key={r.id}
-                  onClick={() => {
-                    setSelectedRouteId(r.id);
-                    if (onSelectRoute) onSelectRoute(r.id);
-                  }}
-                  className={`route-card cursor-pointer rounded-2xl p-space-md transition-all duration-200 bg-surface-container-lowest shadow-md ${
-                    isSelected
-                      ? 'border-2 border-[#16a34a] shadow-lg ring-1 ring-[#22c55e]'
-                      : 'border border-outline-variant/30 hover:border-secondary'
-                  }`}
-                >
-                  <div className="flex items-start justify-between gap-space-sm mb-space-xs">
-                    <div
-                      className={`inline-flex items-center gap-space-xs px-2.5 py-1 rounded-full ${
-                        isClean
-                          ? 'bg-[#dcfce7] text-[#15803d] border border-[#86efac]'
-                          : 'bg-surface-container text-on-surface-variant'
-                      }`}
-                    >
-                      <span className="material-symbols-outlined text-[16px]">
-                        {isClean ? 'eco' : 'speed'}
-                      </span>
-                      <span className="font-label-md text-label-md font-bold tracking-tight">
-                        {r.isRecommended ? 'BEST FOR YOUR HEALTH' : r.isFastest ? 'FASTEST DIRECT' : 'ALTERNATIVE'}
-                      </span>
-                    </div>
+          {/* Heatmap Grid Layer Toggle */}
+          <button
+            type="button"
+            onClick={() => setShowHeatmap((prev) => !prev)}
+            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+              showHeatmap
+                ? 'bg-[#ecfdf5] text-[#15803d] border border-[#a7f3d0]'
+                : 'bg-slate-100 text-slate-600 border border-slate-200'
+            }`}
+          >
+            <span className="material-symbols-outlined text-[15px]">layers</span>
+            <span>AQI Grid: {showHeatmap ? 'ON' : 'OFF'}</span>
+          </button>
+        </Card>
+      </div>
 
-                    <div className="flex items-center gap-1 text-secondary">
-                      <span className="material-symbols-outlined text-[18px]">
-                        {isSelected ? 'radio_button_checked' : 'radio_button_unchecked'}
-                      </span>
-                      <span className="font-label-md text-label-md font-semibold">
-                        {isSelected ? 'Selected' : 'Select'}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="flex items-baseline justify-between mt-space-xs">
-                    <h3
-                      className="text-[24px] font-semibold text-on-surface leading-tight tracking-tight"
-                    >
-                      {r.label}
-                    </h3>
-                    <div className="flex items-baseline gap-1">
-                      <span
-                        className="text-[28px] font-semibold text-primary leading-none tabular-nums"
-                      >
-                        {r.durationMinutes}
-                      </span>
-                      <span className="font-label-md font-semibold text-on-surface-variant font-ui">min</span>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-space-sm mt-1 text-on-surface-variant font-body-sm text-body-sm">
-                    <span className="tabular-nums font-semibold">{r.distanceKm} km</span>
-                    <span>•</span>
-                    <span
-                      className={`inline-flex items-center gap-1 font-semibold ${
-                        r.avgAqi <= 50
-                          ? 'text-[#15803d]'
-                          : r.avgAqi <= 100
-                          ? 'text-[#ca8a04]'
-                          : 'text-error'
-                      }`}
-                    >
-                      <span
-                        className={`w-2 h-2 rounded-full ${
-                          r.avgAqi <= 50 ? 'bg-[#15803d]' : r.avgAqi <= 100 ? 'bg-[#ca8a04]' : 'bg-error'
-                        }`}
-                      />{' '}
-                      AQI {r.avgAqi} ({r.avgAqi <= 50 ? 'Pristine' : r.avgAqi <= 100 ? 'Moderate' : 'Poor'})
-                    </span>
-                    <span>•</span>
-                    <span className="text-secondary">{r.trafficLevel || 'Low Traffic'}</span>
-                  </div>
-
-                  {/* Composite Health Score Bar */}
-                  <div className="mt-space-sm bg-surface-container rounded-xl p-space-sm flex items-center justify-between">
-                    <div className="flex flex-col">
-                      <span className="font-ui text-[11px] font-bold uppercase tracking-[0.08em] text-on-surface-variant">
-                        Composite Health Score
-                      </span>
-                      <span
-                        className="italic text-[15px] text-secondary font-medium"
-                      >
-                        {isClean ? 'Minimal Respiratory Load' : 'Elevated Soot Exposure'}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-space-xs">
-                      <div
-                        className="w-11 h-11 rounded-full bg-secondary-container flex items-center justify-center text-on-secondary-container text-[20px] font-bold tabular-nums"
-                        style={{
-                          border: '1.5px solid rgb(136, 215, 165)',
-                        }}
-                      >
-                        {r.healthScore || 85}
-                      </div>
-                      <span className="font-ui text-label-md font-medium text-on-surface-variant tabular-nums">
-                        /100
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              );
-            })
-          ) : (
-            <div className="bg-surface-container-lowest rounded-2xl p-space-lg shadow-sm border border-[#a7f3d0] text-center flex flex-col items-center justify-center gap-3">
-              <span className="material-symbols-outlined text-[36px] text-secondary">explore</span>
-              <p className="font-headline-sm text-primary font-bold">Search corridors to compare routes</p>
-              <p className="font-body-sm text-on-surface-variant">
-                Select your origin and destination using the top bar or pick on the map.
-              </p>
+      {/* ============================================================
+          MOBILE BOTTOM SHEET (For Mobile Viewports)
+          ============================================================ */}
+      <div className="sm:hidden absolute bottom-0 left-0 right-0 z-30 pointer-events-auto">
+        <div className="bg-white/95 backdrop-blur-md rounded-t-3xl border-t border-slate-200 shadow-2xl flex flex-col max-h-[70vh]">
+          {/* Sheet Handle */}
+          <button
+            type="button"
+            onClick={() => setMobileSheetExpanded((prev) => !prev)}
+            className="w-full py-2.5 flex flex-col items-center justify-center cursor-pointer"
+            aria-label="Toggle Route Drawer"
+          >
+            <div className="w-10 h-1 bg-slate-300 rounded-full" />
+            <div className="flex items-center justify-between w-full px-4 pt-1 text-xs">
+              <span className="font-bold text-slate-800">
+                {routes.length > 0 ? `${routes.length} Corridors` : 'Corridor Search'}
+              </span>
+              <span className="text-[#15803d] font-bold">
+                {mobileSheetExpanded ? 'Collapse' : 'Expand'}
+              </span>
             </div>
-          )}
+          </button>
 
-          {/* Action CTAs */}
-          {selectedRoute && (
-            <div className="flex flex-col gap-space-xs mt-1">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-space-sm mt-1">
-                <button
-                  type="button"
-                  onClick={() => onStartNavigation(selectedRoute.id)}
-                  className="min-h-11 rounded-xl bg-[#14532d] hover:bg-[#166534] text-white font-label-md text-label-md font-bold flex items-center justify-center gap-space-xs shadow-sm transition-colors cursor-pointer"
-                >
-                  <span className="material-symbols-outlined text-[18px]">navigation</span>
-                  <span>Start navigation</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={onGoToComparison}
-                  className="min-h-11 rounded-xl bg-surface-container-lowest hover:bg-[#ecfdf5] text-primary font-label-md text-label-md font-semibold flex items-center justify-center gap-space-xs border border-outline-variant/40 transition-colors cursor-pointer"
-                >
-                  <span className="material-symbols-outlined text-[18px]">balance</span>
-                  <span>Compare routes</span>
-                </button>
+          {mobileSheetExpanded && (
+            <div className="p-4 overflow-y-auto space-y-3">
+              {/* Mobile Search Inputs */}
+              <div className="flex flex-col gap-2 pb-3 border-b border-slate-100">
+                <PlaceInput
+                  label="Starting Location"
+                  placeholder="Start location..."
+                  value={origin}
+                  onChange={setOrigin}
+                  onPickOnMap={() => setPickMode('origin')}
+                  isPicking={pickMode === 'origin'}
+                />
+                <PlaceInput
+                  label="Destination"
+                  placeholder="Target destination..."
+                  value={destination}
+                  onChange={setDestination}
+                  onPickOnMap={() => setPickMode('destination')}
+                  isPicking={pickMode === 'destination'}
+                />
+                <div className="flex gap-2">
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    icon="swap_vert"
+                    onClick={handleSwap}
+                    className="flex-1"
+                  >
+                    Swap
+                  </Button>
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    icon="search"
+                    loading={loading}
+                    disabled={!origin || !destination}
+                    onClick={() => onFindRoutes && onFindRoutes()}
+                    className="flex-[2]"
+                  >
+                    Find routes
+                  </Button>
+                </div>
               </div>
+
+              {/* Mobile Routes List */}
+              <div className="space-y-2">
+                {routes.map((r) => {
+                  const isSelected = selectedRoute?.id === r.id;
+                  const segments = getExposureSegments(r);
+                  return (
+                    <Card
+                      key={r.id}
+                      variant={isSelected ? 'highlight' : 'default'}
+                      p="sm"
+                      interactive
+                      onClick={() => handleSelect(r.id)}
+                      className={isSelected ? 'border-2 border-[#15803d]' : ''}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h4 className="font-bold text-sm text-slate-900">{r.label}</h4>
+                          <span className="text-xs text-slate-500 font-mono">
+                            {r.durationMinutes || r.time} min · {r.distanceKm || r.distance} km
+                          </span>
+                        </div>
+                        <AqiBadge aqi={r.avgAqi} size="sm" />
+                      </div>
+                      <div className="h-1.5 w-full flex rounded-full overflow-hidden bg-slate-100 gap-0.5 mt-2">
+                        {segments.map((seg, idx) => (
+                          <div
+                            key={`${seg.level}-${idx}`}
+                            style={{
+                              width: `${seg.pct}%`,
+                              backgroundColor: seg.color,
+                            }}
+                          />
+                        ))}
+                      </div>
+                    </Card>
+                  );
+                })}
+              </div>
+
+              {/* Mobile CTAs */}
+              {selectedRoute && (
+                <div className="pt-2 flex flex-col gap-2">
+                  <Button
+                    variant="primary"
+                    size="md"
+                    icon="navigation"
+                    onClick={() => onStartNavigation && onStartNavigation(selectedRoute.id)}
+                    className="w-full"
+                  >
+                    Start Navigation
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    icon="balance"
+                    onClick={onGoToComparison}
+                    className="w-full"
+                  >
+                    Compare Routes
+                  </Button>
+                </div>
+              )}
             </div>
           )}
         </div>
-
       </div>
     </div>
   );

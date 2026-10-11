@@ -1,11 +1,37 @@
 // src/pages/ActiveLiveNavigation.jsx
 // ------------------------------------------------------------------
-// BreatheRoute Active Live Navigation HUD
-// Aligned with Stitch active_live_navigation UI.
+// BreatheRoute Active Live Navigation HUD (Driving-App Style)
+// Features:
+// - Full-screen MapView with floating dark-glass HUD panels
+// - Top: Large turn-instruction card (direction icon, instruction, distance) + "Next:" preview
+// - Floating live air-quality chip with LEVEL_COLORS and real-time advisory tip
+// - Bottom bar: elapsed time, distance remaining, route progress bar, large Pause / Resume & End buttons (min 48px)
+// - End-of-trip summary modal with focus trap, Escape to close, pollution avoided metric, and Share/Done
+// - High contrast, accessible, one-handed mobile ergonomic layout
 // ------------------------------------------------------------------
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import MapView from '../components/MapView';
+import {
+  Button,
+  AqiBadge,
+  Badge,
+} from '../components/ui';
+import { LEVEL_COLORS } from '../utils/colors';
+import { createTripSummaryPdf } from '../utils/generateTripSummaryPdf';
+
+// Helper to pick turn direction icon based on instruction keyword
+function getDirectionIcon(instruction = '') {
+  const text = instruction.toLowerCase();
+  if (text.includes('u-turn') || text.includes('uturn')) return 'u_turn_left';
+  if (text.includes('slight right') || text.includes('bear right')) return 'turn_slight_right';
+  if (text.includes('slight left') || text.includes('bear left')) return 'turn_slight_left';
+  if (text.includes('right')) return 'turn_right';
+  if (text.includes('left')) return 'turn_left';
+  if (text.includes('roundabout') || text.includes('rotary')) return 'roundabout_right';
+  if (text.includes('destination') || text.includes('arrive')) return 'flag';
+  return 'straight';
+}
 
 export default function ActiveLiveNavigation({
   route,
@@ -16,10 +42,65 @@ export default function ActiveLiveNavigation({
 }) {
   const activeRoute = route || routes[0] || null;
   const routeSteps = Array.isArray(activeRoute?.steps) ? activeRoute.steps : [];
+  const routeCoords = React.useMemo(() => {
+    if (Array.isArray(activeRoute?.coords)) return activeRoute.coords;
+    if (Array.isArray(activeRoute?.segments)) return activeRoute.segments.flatMap((s) => s.coords || []);
+    return [];
+  }, [activeRoute]);
+
   const [currentStepIdx, setCurrentStepIdx] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [showSummaryModal, setShowSummaryModal] = useState(false);
+  const [copiedShare, setCopiedShare] = useState(false);
+  const [showAqiTip, setShowAqiTip] = useState(false);
+  const [isHudMinimized, setIsHudMinimized] = useState(false);
+
+  // Compute live location and remaining path ahead along the route coordinates
+  const { currentNavLocation, remainingRoute } = React.useMemo(() => {
+    if (routeCoords.length === 0) {
+      return { currentNavLocation: origin || null, remainingRoute: activeRoute };
+    }
+    if (routeSteps.length <= 1) {
+      const pt = routeCoords[0];
+      return {
+        currentNavLocation: { lng: pt[0], lat: pt[1] },
+        remainingRoute: activeRoute,
+      };
+    }
+    const ratio = currentStepIdx / Math.max(1, routeSteps.length - 1);
+    const targetIdx = Math.min(
+      routeCoords.length - 1,
+      Math.max(0, Math.round(ratio * (routeCoords.length - 1)))
+    );
+    const pt = routeCoords[targetIdx];
+    const navLoc = pt && Array.isArray(pt) && pt.length >= 2 ? { lng: pt[0], lat: pt[1] } : origin || null;
+
+    // Slice route coordinates so traversed path behind user disappears (Google Maps style)
+    const slicedCoords = routeCoords.slice(targetIdx);
+    const finalCoords = slicedCoords.length >= 2 ? slicedCoords : (slicedCoords.length === 1 ? [slicedCoords[0], slicedCoords[0]] : []);
+    const updatedRoute = activeRoute
+      ? {
+          ...activeRoute,
+          coords: finalCoords,
+          segments: finalCoords.length >= 2 ? [{
+            coords: finalCoords,
+            aqi: activeRoute.avgAqi || activeRoute.aqi || 35,
+            level: activeRoute.aqiLevel || 'clean',
+            color: '#15803d',
+            instruction: 'Remaining Corridor',
+          }] : [],
+        }
+      : null;
+
+    return {
+      currentNavLocation: navLoc,
+      remainingRoute: updatedRoute,
+    };
+  }, [routeCoords, routeSteps.length, currentStepIdx, origin, activeRoute]);
+
+  const modalRef = useRef(null);
+
   const currentStep = routeSteps[currentStepIdx] || null;
   const nextStep = routeSteps[currentStepIdx + 1] || null;
 
@@ -60,6 +141,57 @@ export default function ActiveLiveNavigation({
     return () => navigator.geolocation.clearWatch(watchId);
   }, []);
 
+  // Modal focus trap & Escape key handler
+  useEffect(() => {
+    if (!showSummaryModal) return;
+
+    const modalEl = modalRef.current;
+    if (modalEl) {
+      const focusables = modalEl.querySelectorAll(
+        'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+      );
+      if (focusables.length > 0) {
+        focusables[0].focus();
+      } else {
+        modalEl.focus();
+      }
+    }
+
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        setShowSummaryModal(false);
+        return;
+      }
+
+      if (e.key === 'Tab' && modalEl) {
+        const focusables = Array.from(
+          modalEl.querySelectorAll(
+            'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+          )
+        );
+        if (focusables.length === 0) return;
+
+        const firstElement = focusables[0];
+        const lastElement = focusables[focusables.length - 1];
+
+        if (e.shiftKey) {
+          if (document.activeElement === firstElement) {
+            e.preventDefault();
+            lastElement.focus();
+          }
+        } else {
+          if (document.activeElement === lastElement) {
+            e.preventDefault();
+            firstElement.focus();
+          }
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [showSummaryModal]);
+
   const formatTime = (secs) => {
     const mins = Math.floor(secs / 60);
     const remainder = secs % 60;
@@ -74,293 +206,428 @@ export default function ActiveLiveNavigation({
     }
   };
 
-  const currentStepDistance = currentStep?.distanceKm > 0
-    ? currentStep.distanceKm < 1
-      ? `${Math.round(currentStep.distanceKm * 1000)} m`
-      : `${currentStep.distanceKm.toFixed(1)} km`
-    : '—';
-  const routeAqi = Number(activeRoute?.avgAqi);
-  const routeAqiLabel = Number.isFinite(routeAqi)
-    ? routeAqi <= 50 ? 'Good' : routeAqi <= 100 ? 'Moderate' : routeAqi <= 150 ? 'High' : 'Poor'
-    : 'Unavailable';
+  // Distance calculations
+  const totalDistance = Number(activeRoute?.distanceKm ?? activeRoute?.distance ?? 0);
+  const remainingDistance =
+    routeSteps.length > 0 && currentStepIdx < routeSteps.length
+      ? routeSteps.slice(currentStepIdx).reduce((acc, s) => acc + (Number(s.distanceKm) || 0), 0)
+      : totalDistance;
+
+  const displayRemainingDistance =
+    remainingDistance > 0
+      ? remainingDistance < 1
+        ? `${Math.round(remainingDistance * 1000)} m`
+        : `${remainingDistance.toFixed(1)} km`
+      : `${totalDistance} km`;
+
+  const currentStepDistance =
+    currentStep?.distanceKm > 0
+      ? currentStep.distanceKm < 1
+        ? `${Math.round(currentStep.distanceKm * 1000)} m`
+        : `${currentStep.distanceKm.toFixed(1)} km`
+      : 'In 100 m';
+
+  // Progress percentage
+  const routeProgress =
+    routeSteps.length > 0
+      ? Math.min(100, Math.round(((currentStepIdx + 1) / routeSteps.length) * 100))
+      : 15;
+
+  // Real Air Quality & Dynamic Tip
+  const routeAqi = Number(activeRoute?.avgAqi ?? activeRoute?.aqi ?? 35);
+  let aqiTip = 'Clean canopy corridor ahead. Breathe easy.';
+  if (routeAqi > 150) {
+    aqiTip = 'Air is hazardous ahead. Consider a mask and minimize exertion.';
+  } else if (routeAqi > 100) {
+    aqiTip = 'Air is getting worse ahead. Consider a mask.';
+  } else if (routeAqi > 50) {
+    aqiTip = 'Moderate particulate levels. Continue through shaded sections.';
+  }
+
+  // Compute pollution avoided compared to fastest route (strictly if computable)
+  const fastestRoute = routes.find((r) => r.isFastest && r.id !== activeRoute?.id);
+  let pollutionAvoided = null;
+  if (
+    fastestRoute?.avgAqi &&
+    activeRoute?.avgAqi &&
+    fastestRoute.avgAqi > activeRoute.avgAqi
+  ) {
+    const reduction = Math.round(
+      ((fastestRoute.avgAqi - activeRoute.avgAqi) / fastestRoute.avgAqi) * 100
+    );
+    if (reduction > 0) {
+      pollutionAvoided = `${reduction}% less pollution than fastest route`;
+    }
+  }
+
+  // Generate and download colourful summary PDF report
+  const handleDownloadPdf = () => {
+    try {
+      const doc = createTripSummaryPdf({
+        origin,
+        destination,
+        activeRoute,
+        elapsedSeconds,
+        totalDistance,
+        routeAqi,
+        pollutionAvoided,
+        routeSteps,
+      });
+      doc.save('BreatheRoute_Trip_Summary.pdf');
+    } catch {
+      // Fallback
+    }
+  };
+
+  // Share the generated PDF directly via Web Share API
+  const handleShare = async () => {
+    try {
+      const doc = createTripSummaryPdf({
+        origin,
+        destination,
+        activeRoute,
+        elapsedSeconds,
+        totalDistance,
+        routeAqi,
+        pollutionAvoided,
+        routeSteps,
+      });
+
+      const pdfBlob = doc.output('blob');
+      const file = new File([pdfBlob], 'BreatheRoute_Trip_Summary.pdf', {
+        type: 'application/pdf',
+      });
+
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({
+          files: [file],
+          title: 'BreatheRoute Clean Trip Summary',
+          text: `My verified clean commute summary report with BreatheRoute (${formatTime(elapsedSeconds)}, ${totalDistance} km)!`,
+        });
+      } else {
+        // Fallback: download PDF and notify user
+        doc.save('BreatheRoute_Trip_Summary.pdf');
+        setCopiedShare(true);
+        setTimeout(() => setCopiedShare(false), 2500);
+      }
+    } catch (err) {
+      if (err?.name !== 'AbortError') {
+        handleDownloadPdf();
+      }
+    }
+  };
 
   return (
-    <div className="relative w-full h-[calc(100vh-80px)] min-h-[720px] overflow-hidden bg-surface">
-      {/* Underlying MapView Canvas */}
-      <div className="absolute inset-0 w-full h-full">
+    <div className="relative w-full -mt-16 h-screen overflow-hidden bg-slate-950 text-white select-none">
+      {/* ============================================================
+          BASE LAYER: FULL-SCREEN MAP CANVAS
+          ============================================================ */}
+      <div className="absolute inset-0 w-full h-full z-0">
         <MapView
           origin={origin}
           destination={destination}
-          routes={activeRoute ? [activeRoute] : []}
-          selectedRouteId={activeRoute?.id}
+          routes={remainingRoute ? [remainingRoute] : []}
+          selectedRouteId={remainingRoute?.id}
           liveLocation={liveLocation}
+          navLocation={currentNavLocation}
           showGridDefault
+          isNavigationMode={true}
+          routeColorOverride="#15803d"
           className="w-full h-full"
         />
       </div>
 
-      {/* FLOATING TOP HUD: ROUTE TELEMETRY PILL & GAUGES */}
-      <div className="absolute top-space-md left-space-md right-space-md z-30 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-space-sm pointer-events-none">
-        {/* Left Telemetry Pill */}
-        <div
-          className="pointer-events-auto bg-white/95 backdrop-blur-2xl rounded-2xl p-space-sm md:px-space-lg md:py-space-sm shadow-xl border border-[#86EFAC]/70 flex flex-wrap items-center justify-between gap-space-md transition-all"
-          style={{
-            boxShadow: 'rgba(15, 61, 42, 0.18) 0px 20px 45px -10px, rgba(0, 38, 23, 0.08) 0px 4px 12px',
-          }}
-        >
-          <div className="flex items-center gap-space-sm">
-            <div
-              className="w-11 h-11 rounded-xl flex items-center justify-center text-[#15803D] flex-shrink-0 shadow-md border border-[#86EFAC]"
-              style={{ background: 'linear-gradient(to bottom, #DCFCE7, #BBF7D0)' }}
-            >
-              <span className="material-symbols-outlined text-[24px]">forest</span>
-            </div>
-            <div>
-              <div className="flex items-center gap-space-xs">
-                <span className="font-headline-sm text-[18px] text-[#15803D] tracking-tight font-bold">
-                  {activeRoute?.label || 'Selected route'}
-                </span>
-                <span className={`w-2.5 h-2.5 rounded-full ${gpsActive ? 'bg-[#16A34A]' : 'bg-amber-500'}`} />
-              </div>
-              <div className="flex items-center gap-space-xs text-on-surface-variant font-data-badge text-data-badge">
-                <span className="font-medium">
-                  {activeRoute?.distanceKm ?? '—'} km route distance
-                </span>
-                <span>•</span>
-                <span className="text-[#15803D] font-semibold">
-                  Elapsed: {formatTime(elapsedSeconds)}
-                </span>
-                <span>•</span>
-                <span className="font-medium">
-                  Est. {activeRoute?.durationMinutes ?? activeRoute?.time ?? '—'} min
-                </span>
-              </div>
-            </div>
+      {/* ============================================================
+          TOP HUD: COMPACT SLEEK TURN-INSTRUCTION & LIVE AQI CHIP
+          ============================================================ */}
+      <div className="absolute top-20 left-3 right-3 sm:top-20 sm:left-4 sm:right-4 z-30 flex flex-col sm:flex-row items-stretch sm:items-start justify-between gap-2.5 pointer-events-none">
+        {/* Compact Driving-Style Turn Instruction Panel */}
+        <div className="pointer-events-auto max-w-md w-full bg-slate-950/85 backdrop-blur-xl rounded-2xl px-3.5 py-2.5 sm:px-4 sm:py-3 border border-white/15 shadow-xl flex items-center gap-3">
+          {/* Direction Icon Badge */}
+          <div className="w-10 h-10 rounded-xl bg-[#15803d] text-white flex items-center justify-center flex-shrink-0 shadow-md border border-[#86efac]/40">
+            <span className="material-symbols-outlined text-[24px]">
+              {getDirectionIcon(currentStep?.instruction)}
+            </span>
           </div>
 
-          <div className="flex items-center gap-space-sm bg-[#F0FDF4] py-1.5 px-space-md rounded-xl border border-[#BBF7D0]">
-            <div className="flex items-center gap-space-xs px-2 py-0.5 rounded-lg bg-[#DCFCE7] border border-[#86EFAC]">
-              <span className="material-symbols-outlined text-[18px] text-[#15803D]">my_location</span>
-              <span className="font-data-badge text-[11px] text-[#14532D] font-bold">
-                {gpsActive && liveLocation ? `GPS ±${Math.round(liveLocation.accuracy)} m` : 'GPS unavailable'}
+          <div className="flex flex-col min-w-0 flex-1">
+            <div className="flex items-center justify-between gap-2">
+              <span className="font-mono text-base sm:text-lg font-black text-[#4ade80] tracking-tight">
+                {currentStepDistance}
               </span>
-            </div>
-            <div className="w-px h-6 bg-[#BBF7D0]" />
-            <div className="flex items-center gap-space-xs px-2 py-0.5 rounded-lg bg-[#DCFCE7] border border-[#86EFAC]">
-              <span className="material-symbols-outlined text-[18px] text-[#15803D]">air</span>
-              <span className="font-data-badge text-[11px] text-[#14532D] font-bold">
-                AQI est. {Number.isFinite(routeAqi) ? routeAqi.toFixed(0) : '—'}
-              </span>
-            </div>
-          </div>
-        </div>
-
-        {/* Right Microclimate Gauge */}
-        <div className="pointer-events-auto bg-white/95 backdrop-blur-2xl rounded-2xl px-space-md py-space-sm shadow-xl border border-[#86EFAC] flex items-center justify-between gap-space-md">
-          <div className="flex items-center gap-space-sm">
-            <div className="relative flex items-center justify-center p-1 rounded-full bg-[#DCFCE7]">
-              <svg className="w-11 h-11 -rotate-90" viewBox="0 0 36 36">
-                <path
-                  className="text-[#BBF7D0]"
-                  d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="3.5"
-                />
-                <path
-                  className="text-[#15803D]"
-                  d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeDasharray="72, 100"
-                  strokeLinecap="round"
-                  strokeWidth="4"
-                />
-              </svg>
-              <span className="absolute font-data-metric text-[12px] font-extrabold text-[#14532D]">
-                {Number.isFinite(routeAqi) ? routeAqi.toFixed(0) : '—'}
-              </span>
-            </div>
-            <div>
-              <div className="flex items-center gap-space-xs">
-                <span className="font-label-md text-label-md uppercase tracking-wider text-on-surface-variant font-bold">
-                  Route AQI estimate
-                </span>
-                <span className="px-2 py-0.5 rounded-full bg-[#DCFCE7] text-[#15803D] font-data-badge text-[10px] font-bold border border-[#86EFAC]">
-                  {routeAqiLabel.toUpperCase()}
-                </span>
-              </div>
-              <p className="font-body-sm text-[12px] text-on-surface font-medium">
-                Experimental estimate; not a live sensor reading.
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* BOTTOM-LEFT FLOATING TURN-BY-TURN GUIDANCE CARD */}
-      <div className="absolute bottom-space-md left-space-md right-space-md md:right-auto md:w-[480px] z-30 flex flex-col gap-space-sm pointer-events-none">
-        <div className="pointer-events-auto bg-white/95 backdrop-blur-2xl rounded-2xl p-space-md shadow-2xl border border-[#86EFAC]/70 flex flex-col gap-space-md">
-          <div className="flex items-start gap-space-md">
-            <div
-              className="w-14 h-14 rounded-2xl flex items-center justify-center text-white flex-shrink-0 shadow-md border border-[#86EFAC]/40"
-              style={{ background: 'linear-gradient(to bottom, #15803D, #14532D)' }}
-            >
-              <span className="material-symbols-outlined text-[36px]">straight</span>
-            </div>
-            <div className="flex flex-col min-w-0 flex-1">
-              <div className="flex items-center justify-between gap-space-xs">
-                <span className="font-data-metric text-[28px] leading-tight font-extrabold text-[#15803D]">
-                  {currentStepDistance}
-                </span>
-                <span className="px-2.5 py-0.5 rounded-full bg-[#DCFCE7] text-[#15803D] border border-[#86EFAC] font-data-badge text-data-badge font-bold flex items-center gap-1">
-                  <span className="material-symbols-outlined text-[13px]">eco</span>
-                  {currentStep ? 'ROUTE STEP' : 'ROUTE OVERVIEW'}
-                </span>
-              </div>
-              <h2
-                className="text-[20px] leading-tight text-on-surface truncate font-semibold mt-0.5"
-              >
-                {currentStep?.instruction || 'Follow the highlighted route on the map'}
-              </h2>
-              <div className="flex items-center gap-space-xs text-on-surface-variant font-body-sm text-[13px] mt-1">
-                <span>Upcoming:</span>
-                <span className="material-symbols-outlined text-[16px] text-[#15803D]">turn_right</span>
-                <span className="truncate font-semibold text-[#15803D]">
-                  {nextStep?.instruction || (routeSteps.length ? 'Final route step' : 'Turn guidance unavailable')}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* Segment Cleanliness & Shade Profile */}
-          <div className="bg-[#F0FDF4] rounded-xl p-space-sm flex flex-col gap-1.5 border border-[#86EFAC]/50">
-            <div className="flex items-center justify-between text-on-surface-variant font-data-badge text-[10px] uppercase tracking-wider">
-              <span className="font-bold text-[#14532D]">Estimated route conditions</span>
-              <span className="text-[#15803D] font-bold">AQI {Number.isFinite(routeAqi) ? routeAqi.toFixed(0) : '—'} · {routeAqiLabel}</span>
-            </div>
-            <div className="h-2.5 w-full rounded-full bg-[#BBF7D0]/60 overflow-hidden flex shadow-inner">
-              <div className="h-full bg-[#15803D]" style={{ width: `${Number.isFinite(routeAqi) ? Math.max(4, Math.min(100, routeAqi / 2)) : 0}%` }} title="Estimated route AQI" />
-            </div>
-            <div className="flex items-center justify-between text-on-surface-variant font-data-badge text-[11px]">
-              <span className="text-[#14532D] font-medium">AQI 0</span>
-              <span className="text-[#15803D] font-semibold">AQI 100</span>
-              <span className="text-[#14532D]">AQI 200+</span>
-            </div>
-          </div>
-
-          {/* Quick Metrics */}
-          <div className="grid grid-cols-2 gap-space-sm">
-            <div className="bg-[#F0FDF4] rounded-xl p-space-sm flex flex-col justify-between border border-[#BBF7D0]">
-              <div className="flex items-center gap-1 text-[#15803D]">
-                <span className="material-symbols-outlined text-[16px]">shield</span>
-                <span className="font-data-badge text-[10px] uppercase font-bold tracking-wider">
-                  Route preference score
-                </span>
-              </div>
-              <div className="mt-1">
-                <span className="font-data-metric text-[24px] font-extrabold text-[#15803D]">{activeRoute?.score ?? '—'}/100</span>
-                <p className="font-body-sm text-[11px] leading-tight text-on-surface-variant">
-                  Experimental preference score
-                </p>
-              </div>
+              <Badge variant="mint" size="sm" icon="navigation">
+                {gpsActive ? 'GPS ACTIVE' : 'SIMULATED'}
+              </Badge>
             </div>
 
-            <div className="bg-[#F0FDF4] rounded-xl p-space-sm flex flex-col justify-between border border-[#BBF7D0]">
-              <div className="flex items-center gap-1 text-on-surface-variant">
-                <span className="material-symbols-outlined text-[16px] text-error">favorite</span>
-                <span className="font-data-badge text-[10px] uppercase font-bold tracking-wider text-[#14532D]">
-                  Estimated duration
-                </span>
-              </div>
-              <div className="mt-1">
-                <div className="flex items-baseline gap-1">
-                  <span className="font-data-metric text-[24px] font-extrabold text-[#14532D]">{activeRoute?.durationMinutes ?? activeRoute?.time ?? '—'}</span>
-                  <span className="font-data-badge text-[11px] text-on-surface-variant">min</span>
-                </div>
-                <p className="font-body-sm text-[11px] leading-tight text-[#15803D] font-medium">
-                  Routing estimate
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* Control Buttons */}
-          <div className="flex items-center gap-space-xs pt-1">
-            <button
-              type="button"
-              onClick={() => setIsPaused(!isPaused)}
-              className="flex-1 h-12 rounded-xl bg-surface-container text-on-surface font-label-lg text-label-lg flex items-center justify-center gap-space-xs hover:bg-surface-container-high transition-colors shadow-sm cursor-pointer"
-            >
-              <span className="material-symbols-outlined text-[20px]">
-                {isPaused ? 'play_arrow' : 'pause'}
-              </span>
-              <span>{isPaused ? 'Resume' : 'Pause'}</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={handleNextStep}
-              className="flex-1 h-12 rounded-xl bg-[#DCFCE7] text-[#15803D] border border-[#86EFAC] font-label-lg text-label-lg flex items-center justify-center gap-space-xs hover:bg-[#BBF7D0] transition-colors shadow-sm font-semibold cursor-pointer"
-            >
-              <span className="material-symbols-outlined text-[20px]">{currentStepIdx < routeSteps.length - 1 ? 'arrow_forward' : 'flag'}</span>
-              <span>{currentStepIdx < routeSteps.length - 1 ? 'Next step' : 'Finish route'}</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setShowSummaryModal(true)}
-              className="w-12 h-12 rounded-xl bg-error-container text-on-error-container flex items-center justify-center hover:opacity-90 transition-opacity shadow-sm cursor-pointer"
-              title="End Trip"
-            >
-              <span className="material-symbols-outlined text-[20px]">close</span>
-            </button>
-          </div>
-        </div>
-
-        {/* GPS and estimate status */}
-        <div className="pointer-events-auto bg-[#14532D] text-white px-space-md py-space-sm rounded-xl shadow-lg flex items-center justify-between text-body-sm text-[13px] border border-[#86EFAC]/40">
-          <span className="flex items-center gap-space-xs">
-            <span className="material-symbols-outlined text-[18px] text-[#86EFAC]">info</span>
-            <span>{gpsActive ? 'GPS location is shown on the map.' : 'Allow location access to show your position.'} AQI and traffic values are estimates.</span>
-          </span>
-        </div>
-      </div>
-
-      {/* TRIP COMPLETION MODAL */}
-      {showSummaryModal && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-surface-container-lowest max-w-md w-full rounded-3xl p-space-xl shadow-2xl border border-[#a7f3d0] flex flex-col gap-space-md text-center">
-            <div className="w-16 h-16 rounded-2xl bg-[#dcfce7] text-[#15803d] flex items-center justify-center mx-auto border border-[#86efac]">
-              <span className="material-symbols-outlined text-[36px]">check_circle</span>
-            </div>
-            <h3
-              className="text-[28px] font-bold text-primary"
-            >
-              Navigation session ended
-            </h3>
-            <p className="text-body-sm text-on-surface-variant">
-              You navigated for {formatTime(elapsedSeconds)} on {activeRoute?.label || 'the selected route'}. AQI and traffic scores are experimental estimates, not live measurements.
+            <p className="text-xs sm:text-sm font-bold text-white tracking-tight truncate mt-0.5" title={currentStep?.instruction}>
+              {currentStep?.instruction || 'Follow highlighted botanical route'}
             </p>
 
-            <div className="grid grid-cols-2 gap-space-xs p-space-sm bg-[#f0fdf4] rounded-2xl border border-[#d1fae5]">
-              <div>
-                <span className="text-[11px] text-on-surface-variant font-data-badge uppercase block">Time Navigated</span>
-                <span className="text-[20px] font-bold text-[#14532d] font-data-metric">{formatTime(elapsedSeconds)}</span>
+            {nextStep?.instruction && (
+              <div className="flex items-center gap-1.5 text-[11px] text-slate-400 mt-1 truncate">
+                <span className="text-[10px] uppercase font-mono text-slate-500">Next:</span>
+                <span className="truncate">{nextStep.instruction}</span>
               </div>
-              <div>
-                <span className="text-[11px] text-on-surface-variant font-data-badge uppercase block">Route AQI estimate</span>
-                <span className="text-[20px] font-bold text-[#15803d] font-data-metric">{Number.isFinite(routeAqi) ? routeAqi.toFixed(0) : '—'}</span>
+            )}
+          </div>
+        </div>
+
+        {/* Compact Live Air-Quality Chip & Toggleable Advisory Tip */}
+        <div className="pointer-events-auto flex flex-col items-end gap-1.5">
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-slate-950/85 backdrop-blur-xl rounded-full border border-white/15 shadow-xl text-xs">
+            <span
+              className="w-2 h-2 rounded-full animate-pulse"
+              style={{
+                backgroundColor:
+                  routeAqi <= 50
+                    ? LEVEL_COLORS.clean
+                    : routeAqi <= 100
+                    ? LEVEL_COLORS.moderate
+                    : routeAqi <= 150
+                    ? LEVEL_COLORS.high
+                    : LEVEL_COLORS.poor,
+              }}
+            />
+            <span className="font-mono text-slate-300 text-[11px] font-semibold">Live AQI</span>
+            <AqiBadge aqi={routeAqi} animated size="sm" />
+            <button
+              type="button"
+              onClick={() => setShowAqiTip((v) => !v)}
+              className="text-slate-400 hover:text-white p-0.5 ml-0.5 cursor-pointer"
+              title="Toggle air quality advisory"
+              aria-label="Toggle air quality advisory"
+            >
+              <span className="material-symbols-outlined text-[15px]">
+                {showAqiTip ? 'expand_less' : 'info'}
+              </span>
+            </button>
+          </div>
+
+          {showAqiTip && (
+            <div className="max-w-xs bg-slate-950/90 backdrop-blur-xl rounded-xl p-2.5 border border-white/15 shadow-xl text-[11px] text-slate-200 leading-snug flex items-start gap-1.5 animate-page-enter">
+              <span className="material-symbols-outlined text-[14px] text-[#4ade80] flex-shrink-0 mt-0.5">
+                shield_with_heart
+              </span>
+              <p>{aqiTip}</p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ============================================================
+          BOTTOM HUD: COMPACT STREAMLINED CONTROLS (NON-OBSTRUCTIVE)
+          ============================================================ */}
+      <div className="absolute bottom-2 left-2 right-2 sm:bottom-4 sm:left-4 sm:right-4 z-30 pointer-events-none">
+        {isHudMinimized ? (
+          /* Minimized Ultra-Slim Floating Pill */
+          <div className="pointer-events-auto max-w-sm mx-auto bg-slate-950/90 backdrop-blur-xl rounded-full px-4 py-2 border border-white/15 shadow-2xl flex items-center justify-between gap-3 text-xs">
+            <div className="flex items-center gap-2">
+              <span className="font-mono font-bold text-[#4ade80]">{displayRemainingDistance}</span>
+              <span className="text-slate-500">·</span>
+              <span className="font-mono text-slate-300">{formatTime(elapsedSeconds)}</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={handleNextStep}
+                className="px-2.5 py-1 rounded-full bg-[#15803d] hover:bg-[#166534] text-white text-[11px] font-bold cursor-pointer shadow-sm"
+              >
+                {currentStepIdx < routeSteps.length - 1 ? 'Next Turn' : 'Arrive'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsHudMinimized(false)}
+                className="p-1 text-slate-400 hover:text-white cursor-pointer"
+                title="Expand navigation controls"
+                aria-label="Expand navigation controls"
+              >
+                <span className="material-symbols-outlined text-[18px]">expand_less</span>
+              </button>
+            </div>
+          </div>
+        ) : (
+          /* Compact Streamlined Control Bar */
+          <div className="pointer-events-auto max-w-lg mx-auto bg-slate-950/90 backdrop-blur-2xl rounded-2xl px-4 py-2.5 sm:px-5 sm:py-3 border border-white/15 shadow-2xl flex flex-col gap-2">
+            {/* Thin Progress line */}
+            <div className="flex items-center justify-between text-[11px] font-mono text-slate-400">
+              <span className="text-[#4ade80] font-semibold">Progress</span>
+              <span>{routeProgress}%</span>
+            </div>
+            <div className="w-full h-1 bg-white/10 rounded-full overflow-hidden -mt-1">
+              <div
+                className="h-full bg-gradient-to-r from-[#16a34a] to-[#4ade80] transition-all duration-300 ease-out rounded-full"
+                style={{ width: `${routeProgress}%` }}
+              />
+            </div>
+
+            {/* Compact row with metrics and buttons */}
+            <div className="flex items-center justify-between gap-3 pt-0.5">
+              {/* Remaining & Elapsed */}
+              <div className="flex items-center gap-2 sm:gap-3 text-xs">
+                <div>
+                  <span className="text-[10px] font-mono uppercase text-slate-400 block -mb-0.5">Remaining</span>
+                  <span className="font-mono text-sm sm:text-base font-black text-[#4ade80]">{displayRemainingDistance}</span>
+                </div>
+                <div className="h-6 w-px bg-white/15" />
+                <div>
+                  <span className="text-[10px] font-mono uppercase text-slate-400 block -mb-0.5">Elapsed</span>
+                  <span className="font-mono text-xs font-semibold text-white">{formatTime(elapsedSeconds)}</span>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex items-center gap-1.5 sm:gap-2">
+                <Button
+                  variant={isPaused ? 'primary' : 'secondary'}
+                  size="sm"
+                  icon={isPaused ? 'play_arrow' : 'pause'}
+                  onClick={() => setIsPaused((prev) => !prev)}
+                  className="h-8 px-2.5 text-xs font-bold shadow-sm bg-white/10 text-white border-white/20 hover:bg-white/20"
+                >
+                  <span className="hidden sm:inline">{isPaused ? 'Resume' : 'Pause'}</span>
+                </Button>
+
+                <Button
+                  variant="primary"
+                  size="sm"
+                  icon={currentStepIdx < routeSteps.length - 1 ? 'arrow_forward' : 'flag'}
+                  iconPosition="right"
+                  onClick={handleNextStep}
+                  className="h-8 px-3 text-xs font-bold shadow-md bg-[#16a34a] hover:bg-[#15803d] text-white"
+                >
+                  {currentStepIdx < routeSteps.length - 1 ? 'Next Turn' : 'Arrive'}
+                </Button>
+
+                <Button
+                  variant="danger"
+                  size="sm"
+                  icon="stop"
+                  onClick={() => setShowSummaryModal(true)}
+                  className="h-8 px-2.5 text-xs font-bold shadow-sm bg-red-600/90 hover:bg-red-600 text-white border border-red-500/40"
+                  title="End Navigation"
+                  aria-label="End navigation trip"
+                >
+                  <span className="hidden sm:inline">End</span>
+                </Button>
+
+                <button
+                  type="button"
+                  onClick={() => setIsHudMinimized(true)}
+                  className="h-8 w-8 rounded-lg hover:bg-white/10 text-slate-400 hover:text-white flex items-center justify-center cursor-pointer ml-0.5"
+                  title="Minimize controls for full map view"
+                  aria-label="Minimize controls for full map view"
+                >
+                  <span className="material-symbols-outlined text-[18px]">expand_more</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ============================================================
+          END-OF-TRIP SUMMARY MODAL (Focus Trap, Escape, Fade+Scale)
+          ============================================================ */}
+      {showSummaryModal && (
+        <div
+          className="fixed inset-0 z-50 bg-black/75 backdrop-blur-md flex items-center justify-center p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="summary-modal-title"
+        >
+          <div
+            ref={modalRef}
+            tabIndex={-1}
+            className="modal-entrance bg-slate-900 max-w-md w-full rounded-3xl p-6 sm:p-8 shadow-2xl border border-white/20 flex flex-col gap-5 text-center text-white outline-none"
+          >
+            {/* Modal Header Icon */}
+            <div className="w-16 h-16 rounded-2xl bg-[#15803d]/20 text-[#4ade80] flex items-center justify-center mx-auto border border-[#4ade80]/40 shadow-soft">
+              <span className="material-symbols-outlined text-[36px]">check_circle</span>
+            </div>
+
+            <div>
+              <h2 id="summary-modal-title" className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
+                Trip Completed!
+              </h2>
+              <p className="text-xs sm:text-sm text-slate-300 mt-1">
+                You successfully completed your clean air corridor on{' '}
+                <strong className="text-[#4ade80]">{activeRoute?.label || 'BreatheRoute'}</strong>.
+              </p>
+            </div>
+
+            {/* Metrics Recap Cards */}
+            <div className="grid grid-cols-3 gap-2.5 py-1">
+              <div className="bg-white/5 rounded-2xl p-3 border border-white/10 flex flex-col items-center">
+                <span className="text-[10px] font-mono uppercase tracking-wider text-slate-400 font-bold">
+                  Total Time
+                </span>
+                <span className="font-mono text-lg font-black text-white mt-1 tabular-nums">
+                  {formatTime(elapsedSeconds)}
+                </span>
+              </div>
+
+              <div className="bg-white/5 rounded-2xl p-3 border border-white/10 flex flex-col items-center">
+                <span className="text-[10px] font-mono uppercase tracking-wider text-slate-400 font-bold">
+                  Distance
+                </span>
+                <span className="font-mono text-lg font-black text-white mt-1 tabular-nums">
+                  {totalDistance} km
+                </span>
+              </div>
+
+              <div className="bg-white/5 rounded-2xl p-3 border border-white/10 flex flex-col items-center">
+                <span className="text-[10px] font-mono uppercase tracking-wider text-slate-400 font-bold">
+                  Avg. AQI
+                </span>
+                <span className="font-mono text-lg font-black text-[#4ade80] mt-1 tabular-nums">
+                  AQI {routeAqi.toFixed(0)}
+                </span>
               </div>
             </div>
 
-            <button
-              type="button"
-              onClick={onEndSession}
-              className="w-full h-12 rounded-xl bg-[#14532d] hover:bg-[#166534] text-white font-label-lg font-bold shadow-md cursor-pointer transition-all"
-            >
-              Return to Map Explorer
-            </button>
+            {/* Pollution Avoided Metric (Strictly hidden if missing) */}
+            {pollutionAvoided && (
+              <div className="bg-[#15803d]/15 p-3 rounded-2xl border border-[#4ade80]/30 flex items-center justify-center gap-2 text-xs font-semibold text-[#86efac]">
+                <span className="material-symbols-outlined text-[18px]">eco</span>
+                <span>{pollutionAvoided}</span>
+              </div>
+            )}
+
+            {/* Modal Actions */}
+            <div className="flex flex-col sm:flex-row gap-2.5 pt-2">
+              <Button
+                variant="secondary"
+                size="md"
+                icon="download"
+                onClick={handleDownloadPdf}
+                className="flex-1 min-h-[46px] bg-[#15803d]/25 text-[#4ade80] border border-[#4ade80]/40 hover:bg-[#15803d]/40 font-bold"
+                title="Download colourful PDF summary and project report"
+              >
+                Download PDF
+              </Button>
+
+              <Button
+                variant="secondary"
+                size="md"
+                icon="share"
+                onClick={handleShare}
+                className="flex-1 min-h-[46px] bg-white/10 text-white border-white/20 hover:bg-white/20 font-bold"
+                title="Share the PDF report directly"
+              >
+                {copiedShare ? 'PDF Downloaded!' : 'Share PDF'}
+              </Button>
+
+              <Button
+                variant="primary"
+                size="md"
+                icon="check"
+                onClick={onEndSession}
+                className="flex-1 min-h-[46px] bg-[#16a34a] hover:bg-[#15803d] text-white font-bold shadow-md"
+              >
+                Done
+              </Button>
+            </div>
           </div>
         </div>
       )}

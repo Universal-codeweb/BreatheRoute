@@ -19,12 +19,12 @@ function parseBounds(str) {
 }
 
 const config = {
-  apiUrl: (import.meta.env.VITE_API_URL || 'https://cyprd9viih.execute-api.us-east-1.amazonaws.com/dev').replace(/\/+$/, ''),
+  apiUrl: (import.meta.env.VITE_API_URL || 'http://localhost:3001/api').replace(/\/+$/, ''),
   mapStyleUrl: import.meta.env.VITE_MAP_STYLE_URL || 'https://tiles.openfreemap.org/styles/liberty',
 
   // Optional values with defaults
   mapCenter: parseCenter(import.meta.env.VITE_MAP_CENTER),
-  mapZoom: Number(import.meta.env.VITE_MAP_ZOOM) || 13,
+  mapZoom:   Number(import.meta.env.VITE_MAP_ZOOM) || 13,
   demoBounds: parseBounds(import.meta.env.VITE_DEMO_BOUNDS),
 };
 

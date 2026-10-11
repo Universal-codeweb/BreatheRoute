@@ -41,6 +41,7 @@ export default function MapView({
   onPickLocation = () => {},
   onCancelPick = () => {},
   liveLocation = null, // { lat, lng, heading }
+  navLocation = null, // dynamic navigation position for moving marker A
   initialCenter = null,
   initialZoom = null,
   className = '',
@@ -48,6 +49,8 @@ export default function MapView({
   showGridDefault = true,
   showAqiGrid: controlledAqiGrid,
   onToggleAqiGrid,
+  isNavigationMode = false,
+  routeColorOverride = null,
 }) {
   const mapContainerRef = useRef(null);
   const mapRef = useRef(null);
@@ -63,6 +66,17 @@ export default function MapView({
   const [mapLoaded, setMapLoaded] = useState(false);
   const [aqiCells, setAqiCells] = useState([]);
   const [isStyleReady, setIsStyleReady] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  // Resize map whenever full screen toggles
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (mapRef.current) {
+        mapRef.current.resize();
+      }
+    }, 150);
+    return () => clearTimeout(timer);
+  }, [isFullscreen]);
 
   // Keep references to active callbacks so map listeners never capture stale state
   const callbacksRef = useRef({
@@ -74,10 +88,71 @@ export default function MapView({
     callbacksRef.current = { onSelectRoute, onPickLocation, pickMode };
   });
 
-  // Fetch AQI Grid cells for map overlay
+  // Fetch AQI Grid cells dynamically matching route/region bounds
   useEffect(() => {
     let isMounted = true;
-    getAqiGrid()
+    let minLng = Infinity;
+    let minLat = Infinity;
+    let maxLng = -Infinity;
+    let maxLat = -Infinity;
+    let hasPoints = false;
+
+    if (origin && typeof origin.lng === 'number' && typeof origin.lat === 'number') {
+      minLng = Math.min(minLng, origin.lng);
+      maxLng = Math.max(maxLng, origin.lng);
+      minLat = Math.min(minLat, origin.lat);
+      maxLat = Math.max(maxLat, origin.lat);
+      hasPoints = true;
+    }
+
+    if (destination && typeof destination.lng === 'number' && typeof destination.lat === 'number') {
+      minLng = Math.min(minLng, destination.lng);
+      maxLng = Math.max(maxLng, destination.lng);
+      minLat = Math.min(minLat, destination.lat);
+      maxLat = Math.max(maxLat, destination.lat);
+      hasPoints = true;
+    }
+
+    routes.forEach((r) => {
+      if (Array.isArray(r.segments)) {
+        r.segments.forEach((seg) => {
+          if (Array.isArray(seg.coords)) {
+            seg.coords.forEach(([lng, lat]) => {
+              minLng = Math.min(minLng, lng);
+              maxLng = Math.max(maxLng, lng);
+              minLat = Math.min(minLat, lat);
+              maxLat = Math.max(maxLat, lat);
+              hasPoints = true;
+            });
+          }
+        });
+      }
+      if (Array.isArray(r.coords)) {
+        r.coords.forEach(([lng, lat]) => {
+          minLng = Math.min(minLng, lng);
+          maxLng = Math.max(maxLng, lng);
+          minLat = Math.min(minLat, lat);
+          maxLat = Math.max(maxLat, lat);
+          hasPoints = true;
+        });
+      }
+    });
+
+    let queryBounds = null;
+    if (hasPoints && Number.isFinite(minLng) && Number.isFinite(maxLng)) {
+      const spanLng = Math.max(maxLng - minLng, 0.03);
+      const spanLat = Math.max(maxLat - minLat, 0.03);
+      const padLng = spanLng * 0.35;
+      const padLat = spanLat * 0.35;
+      queryBounds = {
+        west: Number((minLng - padLng).toFixed(5)),
+        south: Number((minLat - padLat).toFixed(5)),
+        east: Number((maxLng + padLng).toFixed(5)),
+        north: Number((maxLat + padLat).toFixed(5)),
+      };
+    }
+
+    getAqiGrid(queryBounds)
       .then((data) => {
         if (!isMounted) return;
         if (data && Array.isArray(data.cells)) {
@@ -87,10 +162,11 @@ export default function MapView({
       .catch(() => {
         // Silently tolerate backend unavailability
       });
+
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [routes, origin, destination]);
 
   // -----------------------------------------------------------------
   // Initialize MapLibre map instance with OpenFreeMap
@@ -110,8 +186,9 @@ export default function MapView({
       fadeDuration: 150,
     });
 
-    // Add navigation control
+    // Add navigation and fullscreen controls
     map.addControl(new maplibregl.NavigationControl({ showCompass: true }), 'top-right');
+    map.addControl(new maplibregl.FullscreenControl(), 'top-right');
 
     map.on('load', () => {
       setMapLoaded(true);
@@ -164,7 +241,9 @@ export default function MapView({
     if (!mapRef.current) return;
     const canvas = mapRef.current.getCanvas();
     if (canvas) {
-      canvas.style.cursor = pickMode ? 'crosshair' : '';
+      canvas.style.cursor = pickMode
+        ? `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none'%3E%3Cdefs%3E%3Cfilter id='csc' x='0' y='0' width='24' height='24' filterUnits='userSpaceOnUse'%3E%3CfeDropShadow dx='0' dy='1' stdDeviation='1' flood-color='%23000000' flood-opacity='0.35'/%3E%3C/filter%3E%3C/defs%3E%3Cg filter='url(%23csc)'%3E%3Cpath d='M5 14C3.34 14 2 12.66 2 11C2 9.48 3.12 8.22 4.6 8.04C5.12 6.08 6.9 4.6 9 4.6C11.36 4.6 13.3 6.32 13.58 8.66C14.92 8.98 15.9 10.18 15.9 11.64C15.9 13.42 14.46 14.86 12.7 14.86H5' fill='%23ffffff' stroke='%2315803d' stroke-width='1.4' stroke-linejoin='round'/%3E%3Ccircle cx='9' cy='9.5' r='4' stroke='%2315803d' stroke-width='1.2' stroke-dasharray='2 2'/%3E%3Ccircle cx='9' cy='9.5' r='1.5' fill='%2315803d'/%3E%3C/g%3E%3C/svg%3E") 9 9, crosshair`
+        : '';
     }
   }, [pickMode]);
 
@@ -175,49 +254,65 @@ export default function MapView({
     const map = mapRef.current;
     if (!map || !mapLoaded) return;
 
-    // 1. Origin Marker
-    if (origin && typeof origin.lng === 'number' && typeof origin.lat === 'number') {
+    // 1. Origin Marker / Dynamic Live Navigation Marker (Commuter Character Symbol)
+    const markerTarget = isNavigationMode && navLocation ? navLocation : origin;
+    if (markerTarget && typeof markerTarget.lng === 'number' && typeof markerTarget.lat === 'number') {
+      const markerHtml = `
+        <div class="relative flex items-center justify-center">
+          <span class="absolute w-9 h-9 rounded-full bg-[#15803d]/40 animate-ping"></span>
+          <div class="w-8 h-8 rounded-full bg-[#15803d] text-white flex items-center justify-center shadow-xl border-2 border-white ring-2 ring-[#15803d]/40">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 fill-white" viewBox="0 0 24 24">
+              <path d="M13.5 5.5c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zM9.8 8.9L7 23h2.1l1.8-8 2.1 2v6h2v-7.5l-2.1-2 .6-3C14.8 12 16.8 13 19 13v-2c-1.9 0-3.5-1-4.3-2.4l-1-1.6c-.4-.6-1-1-1.7-1-.3 0-.5.1-.8.1L6 8.3V13h2V9.6l1.8-.7"/>
+            </svg>
+          </div>
+        </div>
+        <div class="mt-1 px-2 py-0.5 rounded bg-surface/90 text-on-surface text-[11px] font-bold shadow-md border border-outline-variant/30 backdrop-blur-sm whitespace-nowrap opacity-90 group-hover:opacity-100 transition-opacity">
+          ${isNavigationMode ? 'You' : origin?.label || 'Origin'}
+        </div>
+      `;
       if (!originMarkerRef.current) {
         const el = document.createElement('div');
-        el.className = 'origin-marker-container flex flex-col items-center group cursor-pointer';
-        el.innerHTML = `
-          <div class="relative flex items-center justify-center">
-            <span class="absolute w-8 h-8 rounded-full bg-secondary/30 animate-ping"></span>
-            <span class="w-7 h-7 rounded-full bg-secondary text-white flex items-center justify-center shadow-lg border-2 border-white text-xs font-bold font-mono">A</span>
-          </div>
-          <div class="mt-1 px-2 py-0.5 rounded bg-surface/90 text-on-surface text-[11px] font-semibold shadow-md border border-outline-variant/30 backdrop-blur-sm whitespace-nowrap opacity-90 group-hover:opacity-100 transition-opacity">
-            ${origin.label || 'Origin'}
-          </div>
-        `;
+        el.className = 'origin-marker-container flex flex-col items-center group cursor-pointer transition-transform duration-500 ease-out';
+        el.innerHTML = markerHtml;
         originMarkerRef.current = new maplibregl.Marker({ element: el, anchor: 'bottom' })
-          .setLngLat([origin.lng, origin.lat])
+          .setLngLat([markerTarget.lng, markerTarget.lat])
           .addTo(map);
       } else {
-        originMarkerRef.current.setLngLat([origin.lng, origin.lat]);
+        originMarkerRef.current.setLngLat([markerTarget.lng, markerTarget.lat]);
+        const el = originMarkerRef.current.getElement();
+        if (el) el.innerHTML = markerHtml;
       }
     } else if (originMarkerRef.current) {
       originMarkerRef.current.remove();
       originMarkerRef.current = null;
     }
 
-    // 2. Destination Marker
+    // 2. Destination Marker (Red Flag Symbol)
     if (destination && typeof destination.lng === 'number' && typeof destination.lat === 'number') {
+      const destHtml = `
+        <div class="relative flex items-center justify-center">
+          <span class="absolute w-9 h-9 rounded-full bg-red-500/30 animate-pulse"></span>
+          <div class="w-8 h-8 rounded-full bg-[#dc2626] text-white flex items-center justify-center shadow-xl border-2 border-white ring-2 ring-red-500/40">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 fill-white" viewBox="0 0 24 24">
+              <path d="M14.4 6L14 4H5v17h2v-7h5.6l.4 2h7V6h-5.6z"/>
+            </svg>
+          </div>
+        </div>
+        <div class="mt-1 px-2 py-0.5 rounded bg-surface/90 text-on-surface text-[11px] font-bold shadow-md border border-outline-variant/30 backdrop-blur-sm whitespace-nowrap opacity-90 group-hover:opacity-100 transition-opacity">
+          ${destination.label || 'Destination'}
+        </div>
+      `;
       if (!destinationMarkerRef.current) {
         const el = document.createElement('div');
         el.className = 'dest-marker-container flex flex-col items-center group cursor-pointer';
-        el.innerHTML = `
-          <div class="relative flex items-center justify-center">
-            <span class="w-7 h-7 rounded-full bg-primary text-white flex items-center justify-center shadow-lg border-2 border-white text-xs font-bold font-mono">B</span>
-          </div>
-          <div class="mt-1 px-2 py-0.5 rounded bg-surface/90 text-on-surface text-[11px] font-semibold shadow-md border border-outline-variant/30 backdrop-blur-sm whitespace-nowrap opacity-90 group-hover:opacity-100 transition-opacity">
-            ${destination.label || 'Destination'}
-          </div>
-        `;
+        el.innerHTML = destHtml;
         destinationMarkerRef.current = new maplibregl.Marker({ element: el, anchor: 'bottom' })
           .setLngLat([destination.lng, destination.lat])
           .addTo(map);
       } else {
         destinationMarkerRef.current.setLngLat([destination.lng, destination.lat]);
+        const el = destinationMarkerRef.current.getElement();
+        if (el) el.innerHTML = destHtml;
       }
     } else if (destinationMarkerRef.current) {
       destinationMarkerRef.current.remove();
@@ -244,7 +339,20 @@ export default function MapView({
       liveMarkerRef.current.remove();
       liveMarkerRef.current = null;
     }
-  }, [origin, destination, liveLocation, mapLoaded]);
+  }, [origin, destination, liveLocation, navLocation, isNavigationMode, mapLoaded]);
+
+  // Smooth camera tracking when marker A moves during active navigation
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapLoaded || !isNavigationMode || !navLocation) return;
+    if (typeof navLocation.lng === 'number' && typeof navLocation.lat === 'number') {
+      map.easeTo({
+        center: [navLocation.lng, navLocation.lat],
+        duration: 750,
+        essential: true,
+      });
+    }
+  }, [navLocation, isNavigationMode, mapLoaded]);
 
   // -----------------------------------------------------------------
   // Sync GeoJSON Route Layers (Selected Route with Casing, Fastest, Alts)
@@ -267,6 +375,12 @@ export default function MapView({
     const selectedFullCoords = [];
 
     if (selectedRoute) {
+      const getActiveColor = () => {
+        if (routeColorOverride) return routeColorOverride;
+        // Navigation & clean corridor route color: always signature dark green (#15803d)
+        return '#15803d';
+      };
+
       if (Array.isArray(selectedRoute.segments) && selectedRoute.segments.length > 0) {
         selectedRoute.segments.forEach((seg, sIdx) => {
           if (Array.isArray(seg.coords) && seg.coords.length >= 2) {
@@ -275,7 +389,7 @@ export default function MapView({
               properties: {
                 segmentIndex: sIdx,
                 level: seg.level || selectedRoute.aqiLevel || 'moderate',
-                color: getLevelColor(seg.level || selectedRoute.aqiLevel || 'moderate'),
+                color: getActiveColor(seg.level),
                 aqi: seg.aqi || selectedRoute.aqi,
                 instruction: seg.instruction || seg.name || `Segment ${sIdx + 1}`,
               },
@@ -294,7 +408,7 @@ export default function MapView({
           properties: {
             segmentIndex: 0,
             level: selectedRoute.aqiLevel || 'moderate',
-            color: getLevelColor(selectedRoute.aqiLevel || 'moderate'),
+            color: getActiveColor(selectedRoute.aqiLevel),
             aqi: selectedRoute.aqi,
             instruction: selectedRoute.name,
           },
@@ -492,7 +606,7 @@ export default function MapView({
     } catch {
       // tolerate style reload races
     }
-  }, [routes, selectedRouteId, mapLoaded, isStyleReady]);
+  }, [routes, selectedRouteId, mapLoaded, isStyleReady, isNavigationMode, routeColorOverride]);
 
   // -----------------------------------------------------------------
   // Sync AQI Grid Overlay Layer
@@ -661,15 +775,19 @@ export default function MapView({
   }, [routes, origin, destination]);
 
   useEffect(() => {
-    if (mapLoaded && (routes.length > 0 || (origin && destination))) {
+    if (mapLoaded && !isNavigationMode && (routes.length > 0 || (origin && destination))) {
       fitBoundsToContent();
     }
-  }, [routes, origin, destination, mapLoaded, fitBoundsToContent]);
+  }, [routes, origin, destination, mapLoaded, isNavigationMode, fitBoundsToContent]);
 
   return (
     <div
-      className={`relative w-full rounded-2xl overflow-hidden border border-surface-container bg-surface-container-low shadow-sm ${className}`}
-      style={{ height }}
+      className={
+        isFullscreen
+          ? 'fixed inset-0 z-[9999] w-screen h-screen rounded-none border-0 bg-slate-950 flex flex-col shadow-2xl'
+          : `relative w-full rounded-2xl overflow-hidden border border-surface-container bg-surface-container-low shadow-sm ${className}`
+      }
+      style={isFullscreen ? { height: '100vh', width: '100vw' } : { height }}
     >
       {/* MapLibre DOM Node */}
       <div ref={mapContainerRef} className="w-full h-full" />
@@ -694,7 +812,7 @@ export default function MapView({
         </div>
       )}
 
-      {/* Floating Map Control Bar (AQI Grid Toggle, Center on Routes) */}
+      {/* Floating Map Control Bar (AQI Grid Toggle, Fullscreen Toggle, Center on Routes) */}
       <div className="absolute bottom-4 left-4 z-20 flex flex-wrap items-center gap-2">
         {/* Toggle AQI Grid Overlay */}
         <button
@@ -717,6 +835,23 @@ export default function MapView({
           <span>AQI Grid {showAqiGrid ? 'On' : 'Off'}</span>
         </button>
 
+        {/* Toggle Full Screen Button */}
+        <button
+          type="button"
+          onClick={() => setIsFullscreen((prev) => !prev)}
+          className={`flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-semibold backdrop-blur-md shadow-md border transition-all cursor-pointer ${
+            isFullscreen
+              ? 'bg-[#15803d] text-white border-emerald-500/60 shadow-emerald-500/20'
+              : 'bg-surface/90 text-on-surface-variant hover:text-on-surface border-outline-variant/40'
+          }`}
+          title={isFullscreen ? 'Exit full screen (Esc)' : 'Expand map to full screen'}
+        >
+          <span className="material-symbols-outlined text-[16px]">
+            {isFullscreen ? 'fullscreen_exit' : 'fullscreen'}
+          </span>
+          <span>{isFullscreen ? 'Exit full screen' : 'Full screen'}</span>
+        </button>
+
         {/* Recenter / Fit View */}
         {(routes.length > 0 || origin || destination) && (
           <button
@@ -725,7 +860,7 @@ export default function MapView({
             className="flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-semibold bg-surface/90 text-on-surface-variant hover:text-on-surface border border-outline-variant/40 backdrop-blur-md shadow-md transition-all"
             title="Fit map view to all routes"
           >
-            <span className="material-symbols-outlined text-[16px]">crop_free</span>
+            <span className="material-symbols-outlined text-[16px]">center_focus_strong</span>
             <span>Fit view</span>
           </button>
         )}

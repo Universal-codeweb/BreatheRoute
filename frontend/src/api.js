@@ -53,8 +53,16 @@ export async function getRoutes(origin, destination, mode, profile) {
 // ------------------------------------------------------------------
 // 2) GET /aqi — fetch the AQI grid for the coverage area
 // ------------------------------------------------------------------
-export async function getAqiGrid() {
-  return fetchWithTimeout(config.apiUrl + '/aqi');
+export async function getAqiGrid(boundsOrCenter) {
+  let url = config.apiUrl + '/aqi';
+  if (boundsOrCenter) {
+    if (boundsOrCenter.west !== undefined) {
+      url += `?bounds=${boundsOrCenter.west},${boundsOrCenter.south},${boundsOrCenter.east},${boundsOrCenter.north}`;
+    } else if (boundsOrCenter.lng !== undefined && boundsOrCenter.lat !== undefined) {
+      url += `?center=${boundsOrCenter.lng},${boundsOrCenter.lat}`;
+    }
+  }
+  return fetchWithTimeout(url);
 }
 
 // ------------------------------------------------------------------

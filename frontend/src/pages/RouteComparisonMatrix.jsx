@@ -1,10 +1,21 @@
 // src/pages/RouteComparisonMatrix.jsx
 // ------------------------------------------------------------------
-// BreatheRoute Route Comparison Matrix Page
-// Aligned with Stitch route_comparison_matrix UI.
+// BreatheRoute Multi-Parametric Route Comparison Matrix
+// Premium side-by-side evaluation of clean air corridors.
 // ------------------------------------------------------------------
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import {
+  Card,
+  Button,
+  AqiBadge,
+  Badge,
+  SectionLabel,
+  Skeleton,
+  ErrorState,
+  EmptyState,
+} from '../components/ui';
+import { LEVEL_COLORS } from '../utils/colors';
 
 function getAqiCategory(value) {
   if (!Number.isFinite(Number(value))) return 'Unavailable';
@@ -15,12 +26,20 @@ function getAqiCategory(value) {
 }
 
 function getRouteTime(route) {
-  return Number(route?.durationMinutes ?? route?.time);
+  return Number(route?.durationMinutes ?? route?.time ?? 0);
 }
 
 function getBarWidth(value, max = 100) {
   const numericValue = Number(value);
   return `${Number.isFinite(numericValue) ? Math.max(0, Math.min(100, (numericValue / max) * 100)) : 0}%`;
+}
+
+function getAqiColor(aqi) {
+  if (!Number.isFinite(Number(aqi))) return '#94a3b8';
+  if (aqi <= 50) return LEVEL_COLORS.clean;
+  if (aqi <= 100) return LEVEL_COLORS.moderate;
+  if (aqi <= 150) return LEVEL_COLORS.high;
+  return LEVEL_COLORS.poor;
 }
 
 export default function RouteComparisonMatrix({
@@ -30,18 +49,27 @@ export default function RouteComparisonMatrix({
   origin,
   destination,
   profile = 'general',
-  aegisAnalysis = null,
+  loading = false,
   _loading = false,
+  error = null,
   _error = null,
   onBackToMap,
   onSelectRoute,
   onStartNavigation,
   onProfileChange,
 }) {
-  const [activeProfile, setActiveProfile] = useState(profile || 'general');
-  const [showFullAiReport, setShowFullAiReport] = useState(false);
+  const isBusy = loading || _loading;
+  const failure = error || _error;
 
-  // Identify recommended (cleanest), fastest, and alternative routes
+  const [customProfile, setCustomProfile] = useState(null);
+  const activeProfile = customProfile || profile || 'general';
+  const [animated, setAnimated] = useState(false);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setAnimated(true), 80);
+    return () => clearTimeout(timer);
+  }, []);
+
   const recommendedRoute =
     routes.find((r) => r.isRecommended) ||
     routes[0] ||
@@ -49,659 +77,695 @@ export default function RouteComparisonMatrix({
 
   const fastestRoute =
     routes.find((r) => r.isFastest && r.id !== recommendedRoute?.id) ||
+    routes.find((r) => r.isFastest) ||
+    routes[1] ||
     null;
 
-  const alternativeRoute =
-    routes.find((r) => r.id !== recommendedRoute?.id && r.id !== fastestRoute?.id) ||
-    routes[2] ||
-    null;
-  const fastestDuration = getRouteTime(fastestRoute);
+  const activeSelectedId = selectedRouteId || recommendedRoute?.id;
+  const selectedRoute =
+    routes.find((r) => r.id === activeSelectedId) ||
+    recommendedRoute;
+
   const recommendedDuration = getRouteTime(recommendedRoute);
-  const recommendedTimeDelta = Number.isFinite(fastestDuration) && Number.isFinite(recommendedDuration)
-    ? Math.max(0, recommendedDuration - fastestDuration).toFixed(1)
-    : null;
+  const fastestDuration = getRouteTime(fastestRoute);
+  const timeDelta =
+    Number.isFinite(fastestDuration) && Number.isFinite(recommendedDuration)
+      ? Math.max(0, Math.round(recommendedDuration - fastestDuration))
+      : 0;
 
-  const handleSelectRoute = (routeId) => {
+  let pollutionReduction = 0;
+  if (
+    fastestRoute?.avgAqi &&
+    recommendedRoute?.avgAqi &&
+    fastestRoute.avgAqi > recommendedRoute.avgAqi
+  ) {
+    pollutionReduction = Math.round(
+      ((fastestRoute.avgAqi - recommendedRoute.avgAqi) / fastestRoute.avgAqi) * 100
+    );
+  }
+
+  const handleSelect = (routeId) => {
     setSelectedRouteId(routeId);
     if (onSelectRoute) onSelectRoute(routeId);
   };
 
-  const activeRoute = routes.find((route) => route.id === selectedRouteId) || recommendedRoute;
+  const handleProfileSwitch = (newProfile) => {
+    setCustomProfile(newProfile);
+    if (onProfileChange) onProfileChange(newProfile);
+  };
+
+  const validTimes = routes.map((r) => getRouteTime(r)).filter(Number.isFinite);
+  const minTime = validTimes.length ? Math.min(...validTimes) : null;
+
+  const validDistances = routes.map((r) => Number(r.distanceKm ?? r.distance)).filter(Number.isFinite);
+  const minDist = validDistances.length ? Math.min(...validDistances) : null;
+
+  const validAqis = routes.map((r) => Number(r.avgAqi ?? r.aqi)).filter(Number.isFinite);
+  const minAqi = validAqis.length ? Math.min(...validAqis) : null;
+
+  const validScores = routes.map((r) => Number(r.healthScore ?? r.score)).filter(Number.isFinite);
+  const maxScore = validScores.length ? Math.max(...validScores) : null;
+
+  if (isBusy) {
+    return (
+      <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 flex flex-col gap-6">
+        <Skeleton variant="card" className="h-44 rounded-3xl" />
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <Skeleton variant="card" className="h-96 rounded-2xl" />
+          <Skeleton variant="card" className="h-96 rounded-2xl" />
+          <Skeleton variant="card" className="h-96 rounded-2xl" />
+        </div>
+      </div>
+    );
+  }
+
+  if (failure) {
+    return (
+      <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
+        <ErrorState
+          title="Unable to load route matrix"
+          message={failure}
+          onRetry={onBackToMap}
+          retryText="Return to Map"
+        />
+      </div>
+    );
+  }
+
+  if (routes.length === 0) {
+    return (
+      <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
+        <EmptyState
+          icon="balance"
+          title="No routes to compare yet"
+          description="Plan a route with origin and destination waypoints to generate and compare atmospheric corridors side by side."
+          actionText="Back to Route Planner"
+          onAction={onBackToMap}
+        />
+      </div>
+    );
+  }
 
   return (
-    <div className="w-full max-w-7xl mx-auto px-margin md:px-margin-tablet lg:px-margin-desktop py-space-xl flex-1 flex flex-col gap-space-lg">
-      {/* Top Action & Navigation Context */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-space-md mb-space-xs">
-        <div className="flex items-center gap-space-md">
-          <button
-            type="button"
+    <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 md:py-10 flex-1 flex flex-col gap-8 pb-32">
+      {/* -------------------------------------------------------------
+          TOP BAR: BACK BUTTON & PROFILE SELECTOR
+          ------------------------------------------------------------- */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <Button
+            variant="secondary"
+            size="sm"
+            icon="arrow_back"
             onClick={onBackToMap}
-            className="inline-flex items-center justify-center gap-space-xs px-space-md py-space-xs bg-surface-container hover:bg-surface-container-high text-on-surface rounded-xl transition-all shadow-sm font-label-lg text-label-lg font-semibold cursor-pointer"
+            className="shadow-2xs bg-white hover:bg-slate-50"
           >
-            <span className="material-symbols-outlined text-[18px]">arrow_back</span>
-            <span>Back to Map</span>
-          </button>
-          <div className="flex items-center gap-space-xs px-space-sm py-1 bg-surface-container-low rounded-full border border-[#a7f3d0]/60">
-            <span className="w-2 h-2 rounded-full bg-secondary" />
-            <span className="font-data-badge text-data-badge text-on-surface-variant uppercase tracking-wider">
-              AQI and traffic estimates
-            </span>
+            Back to map
+          </Button>
+
+          <div>
+            <SectionLabel type="bracket" label="Comparative Corridor Intelligence" />
+            <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight mt-0.5">
+              Route Comparison Matrix
+            </h1>
           </div>
         </div>
 
-        <div className="flex items-center gap-space-sm self-start md:self-auto">
-          <button
-            type="button"
-            onClick={() => window.print()}
-            className="flex items-center gap-space-xs px-space-md py-space-xs bg-surface-container-lowest hover:bg-surface-container text-on-surface rounded-xl transition-all shadow-sm border border-outline-variant/30 cursor-pointer"
-          >
-            <span className="material-symbols-outlined text-[18px] text-primary">share</span>
-            <span className="font-label-md text-label-md font-semibold">Export Matrix</span>
-          </button>
-        </div>
-      </div>
-
-      {/* Header Section */}
-      <div className="relative bg-surface-container-lowest rounded-3xl p-space-lg md:p-space-xl shadow-sm border border-[#dcece2] overflow-hidden">
-        <div className="absolute -right-16 -top-16 w-80 h-80 rounded-full bg-secondary-container/20 blur-3xl pointer-events-none" />
-        <div className="relative z-10 max-w-4xl">
-          <div className="inline-flex items-center gap-space-xs px-space-sm py-0.5 rounded-full bg-primary-container text-on-primary-container mb-space-xs">
-            <span className="material-symbols-outlined text-[14px]">analytics</span>
-            <span className="font-data-badge text-data-badge tracking-wider uppercase font-semibold">
-              Multi-Parametric Route Matrix
-            </span>
-          </div>
-          <h1
-            className="text-[36px] md:text-[50px] leading-[1.08] text-primary font-bold tracking-tight"
-          >
-            Compare Your <span className="italic font-normal text-secondary">Routes</span>
-          </h1>
-          <p
-            className="text-[17px] md:text-[19px] leading-[1.5] text-on-surface-variant mt-space-xs font-ui"
-          >
-              Comparing route duration and experimental AQI/traffic scores between{' '}
-            <span className="font-bold text-primary px-1.5 py-0.5 rounded bg-[#ecfdf5] border border-[#a7f3d0]">
-              {origin?.label || 'Selected Origin'}
-            </span>{' '}
-            and{' '}
-            <span className="font-bold text-primary px-1.5 py-0.5 rounded bg-[#ecfdf5] border border-[#a7f3d0]">
-              {destination?.label || 'Target Destination'}
-            </span>.
-          </p>
-        </div>
-
-        {/* Health Profile Filter Tabs */}
-        <div className="mt-space-lg pt-space-lg bg-surface-container-low/60 -mx-space-lg md:-mx-space-xl px-space-lg md:px-space-xl border-t border-[#a7f3d0]/30">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-space-sm">
-            <div className="flex items-center gap-space-xs">
-              <span className="material-symbols-outlined text-secondary text-[20px]">vital_signs</span>
-              <span className="font-label-lg text-label-lg text-on-surface font-semibold">
-                Target Health Profile:
-              </span>
-            </div>
-            <div className="flex flex-wrap items-center gap-space-xs">
-              {[
-                { id: 'general', label: 'General Commuter', icon: 'directions_walk' },
-                { id: 'asthma', label: 'Asthma', icon: 'pulmonology' },
-                { id: 'elderly', label: 'Elderly', icon: 'elderly' },
-                { id: 'child', label: 'Child', icon: 'child_care' },
-              ].map((p) => {
-                const isActive = activeProfile === p.id;
-                return (
-                  <button
-                    key={p.id}
-                    type="button"
-                    onClick={() => { setActiveProfile(p.id); if (onProfileChange) onProfileChange(p.id); }}
-                    className={`px-space-md py-space-xs rounded-xl font-label-md text-label-md transition-all flex items-center gap-space-xs cursor-pointer ${
-                      isActive
-                        ? 'bg-primary-container text-on-primary-container font-semibold shadow-sm'
-                        : 'bg-surface-container-lowest text-on-surface hover:bg-surface-container'
-                    }`}
-                  >
-                    <span className="material-symbols-outlined text-[16px]">{p.icon}</span>
-                    <span>{p.label}</span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Active Recommendation Callout Banner */}
-      <div
-        className="rounded-2xl p-space-md md:p-space-lg shadow-sm border border-[#a7f3d0]"
-        style={{
-          background: 'linear-gradient(135deg, rgb(240, 253, 244) 0%, rgb(220, 252, 231) 100%)',
-          boxShadow: 'rgba(21, 128, 61, 0.08) 0px 4px 16px',
-        }}
-      >
-        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-space-md">
-          <div className="flex items-start gap-space-md">
-            <div
-              className="w-12 h-12 rounded-xl flex items-center justify-center text-white shrink-0 shadow-md border border-[#a7f3d0]"
-              style={{ background: 'linear-gradient(135deg, rgb(5, 150, 105) 0%, rgb(21, 128, 61) 100%)' }}
+        {/* Profile Switcher Pills */}
+        <div className="flex items-center gap-1.5 bg-slate-100/80 backdrop-blur-md p-1.5 rounded-2xl self-start sm:self-auto overflow-x-auto max-w-full border border-slate-200/60 shadow-2xs">
+          {[
+            { id: 'general', label: 'General', icon: 'person' },
+            { id: 'asthma', label: 'Asthma', icon: 'air' },
+            { id: 'elderly', label: 'Elderly', icon: 'nature_people' },
+            { id: 'child', label: 'Child', icon: 'child_care' },
+          ].map((p) => (
+            <button
+              key={p.id}
+              type="button"
+              onClick={() => handleProfileSwitch(p.id)}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                activeProfile === p.id
+                  ? 'bg-white text-[#15803d] shadow-xs font-extrabold border border-slate-200/60'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
             >
-              <span className="material-symbols-outlined text-[26px]">eco</span>
-            </div>
-            <div>
-              <div className="flex items-center gap-space-xs mb-1">
-                <span className="font-data-badge text-data-badge uppercase font-bold text-[#166534] tracking-wider">
-                  ALGORITHMIC RECOMMENDATION
-                </span>
-                <span className="w-1.5 h-1.5 rounded-full bg-secondary" />
-                <span className="font-data-badge text-data-badge text-secondary font-bold px-2 py-0.5 rounded-full bg-white/80 border border-[#a7f3d0]">
-                  Profile-weighted score
-                </span>
-              </div>
-              <h2 className="font-headline-sm text-headline-sm text-primary font-bold">
-                Why we recommend {recommendedRoute?.label || 'the selected route'}
-              </h2>
-              <p className="font-body-md text-body-md text-on-surface-variant mt-0.5">
-                {recommendedRoute
-                  ? `${recommendedRoute.label} is recommended for the ${activeProfile} profile with a score of ${recommendedRoute.healthScore ?? '—'}/100, an AQI estimate of ${recommendedRoute.avgAqi ?? '—'} (${getAqiCategory(recommendedRoute.avgAqi)}), and ${recommendedTimeDelta ?? '—'} min vs the fastest route.`
-                  : 'Choose a route to see its experimental profile score and AQI estimate.'}
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-space-sm shrink-0 self-end md:self-auto">
-            <div className="px-space-md py-space-sm rounded-xl bg-white/90 shadow-sm border border-[#a7f3d0] flex items-center gap-space-xs">
-              <div className="w-7 h-7 rounded-full bg-secondary-container/50 flex items-center justify-center text-secondary">
-                <span className="material-symbols-outlined text-[18px]">favorite</span>
-              </div>
-              <span className="font-data-metric text-data-metric font-bold text-secondary tracking-tight">
-                {getAqiCategory(recommendedRoute?.avgAqi)}
-              </span>
-              <span className="font-label-md text-label-md text-on-surface-variant font-medium">
-                AQI estimate
-              </span>
-            </div>
-          </div>
+              <span className="material-symbols-outlined text-[15px]">{p.icon}</span>
+              <span>{p.label}</span>
+            </button>
+          ))}
         </div>
       </div>
 
-      {/* Aegis Route AI Health Intelligence Advisory */}
-      {aegisAnalysis && (
-        <div className="rounded-2xl p-space-md md:p-space-lg bg-surface-container-lowest border border-[#86efac]/80 shadow-md">
-          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-space-md pb-space-sm border-b border-[#a7f3d0]/40">
-            <div className="flex items-center gap-space-sm">
-              <div className="w-10 h-10 rounded-xl bg-[#065f46] text-white flex items-center justify-center shadow">
-                <span className="material-symbols-outlined text-[22px]">health_and_safety</span>
+      {/* -------------------------------------------------------------
+          TOP: ALGORITHMIC VERDICT HERO BANNER
+          ------------------------------------------------------------- */}
+      {recommendedRoute && (
+        <Card
+          variant="highlight"
+          p="lg"
+          className="bg-gradient-to-br from-emerald-50/90 via-white to-emerald-50/40 border-[#86efac]/80 shadow-soft relative overflow-hidden rounded-3xl"
+        >
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 relative z-10">
+            <div className="max-w-2xl flex flex-col gap-2.5">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-[#15803d] text-white text-[11px] font-bold tracking-wide">
+                  <span className="material-symbols-outlined text-[13px]">verified</span>
+                  ALGORITHMIC VERDICT
+                </span>
+                <span className="text-xs font-mono font-bold text-slate-400">·</span>
+                <span className="text-xs font-mono font-semibold text-[#15803d]">
+                  Optimized for {activeProfile.toUpperCase()} profile
+                </span>
               </div>
-              <div>
-                <div className="flex items-center gap-space-xs">
-                  <span className="text-[12px] font-bold text-[#065f46] uppercase tracking-wider">
-                    Aegis Route AI Health Advisory
-                  </span>
-                  <span className="px-2 py-0.5 text-[11px] font-semibold rounded-full bg-[#dcfce7] text-[#15803d] border border-[#86efac]">
-                    {aegisAnalysis.source === 'gemini-ai' ? 'Live Gemini AI' : 'Aegis Intelligence'}
+
+              <h2 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
+                Recommended:{' '}
+                <span className="text-[#15803d]">{recommendedRoute.label || recommendedRoute.name || 'Clean Corridor'}</span>
+              </h2>
+
+              <p className="text-sm text-slate-700 leading-relaxed font-medium">
+                {recommendedRoute.reason ||
+                  'Delivers maximum botanical canopy coverage and the lowest cumulative particulate inhalation with minimal travel delay.'}
+              </p>
+
+              {/* Trade-off summary pills */}
+              <div className="flex items-center gap-2 pt-1 flex-wrap">
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white border border-[#86efac] text-xs font-mono font-bold text-[#15803d] shadow-2xs">
+                  <span className="material-symbols-outlined text-[15px]">eco</span>
+                  <span>
+                    {pollutionReduction > 0 ? `-${pollutionReduction}% air pollution` : 'Optimal clean air'}
                   </span>
                 </div>
-                <h3 className="text-[18px] font-bold text-[#14532d]">
-                  Personalized Environmental Exposure Analysis
-                </h3>
+
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white border border-slate-200 text-xs font-mono font-semibold text-slate-700 shadow-2xs">
+                  <span className="material-symbols-outlined text-[15px] text-slate-500">pace</span>
+                  <span>+{timeDelta} min pace trade-off</span>
+                </div>
+
+                {(origin?.label || destination?.label) && (
+                  <span className="text-xs text-slate-500 font-medium truncate max-w-xs">
+                    from {origin?.label || 'Origin'} to {destination?.label || 'Destination'}
+                  </span>
+                )}
               </div>
             </div>
 
-            <div className="flex items-center gap-space-md">
-              <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[#ecfdf5] border border-[#a7f3d0]">
-                <span className="text-xs text-[#166534] font-medium">Safety Score:</span>
-                <span className="text-base font-extrabold text-[#15803d]">
-                  {aegisAnalysis.aqiSafetyScore ?? 85}/100
-                </span>
+            {/* Quick Metrics Group & Quick CTA */}
+            <div className="flex flex-col sm:flex-row lg:flex-col items-stretch sm:items-center gap-3 shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="bg-white/95 p-3.5 rounded-2xl border border-[#bbf7d0] shadow-2xs flex flex-col items-center text-center min-w-[110px]">
+                  <AqiBadge
+                    aqi={recommendedRoute.avgAqi}
+                    animated
+                    size="md"
+                    className="mb-1"
+                  />
+                  <span className="text-[10px] font-mono uppercase tracking-wider text-slate-500 font-bold">
+                    Avg. Exposure
+                  </span>
+                </div>
+
+                <div className="bg-white/95 p-3.5 rounded-2xl border border-[#bbf7d0] shadow-2xs flex flex-col items-center text-center min-w-[110px]">
+                  <span className="text-xl font-black font-mono text-slate-900">
+                    {recommendedRoute.durationMinutes || recommendedRoute.time} min
+                  </span>
+                  <span className="text-[10px] font-mono uppercase tracking-wider text-slate-500 font-bold mt-1">
+                    Travel Time
+                  </span>
+                </div>
               </div>
-              <button
-                type="button"
-                onClick={() => setShowFullAiReport((prev) => !prev)}
-                className="text-xs font-semibold text-[#065f46] hover:underline flex items-center gap-1 cursor-pointer"
+
+              <Button
+                variant="primary"
+                size="md"
+                icon="navigation"
+                iconPosition="right"
+                onClick={() => onStartNavigation && onStartNavigation(recommendedRoute.id)}
+                className="w-full bg-[#16a34a] hover:bg-[#15803d] text-white font-bold shadow-md h-10"
               >
-                <span>{showFullAiReport ? 'Hide Full Report' : 'View Full Report'}</span>
-                <span className="material-symbols-outlined text-[16px]">
-                  {showFullAiReport ? 'expand_less' : 'expand_more'}
-                </span>
-              </button>
+                Navigate Recommended
+              </Button>
             </div>
           </div>
-
-          {/* Warnings List */}
-          {Array.isArray(aegisAnalysis.healthWarnings) && aegisAnalysis.healthWarnings.length > 0 && (
-            <div className="mt-space-sm flex flex-wrap gap-2">
-              {aegisAnalysis.healthWarnings.map((warning, idx) => (
-                <div
-                  key={idx}
-                  className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-[#fef2f2] border border-[#fecaca] text-[#991b1b] text-xs font-medium"
-                >
-                  <span className="material-symbols-outlined text-[14px]">warning</span>
-                  <span>{warning}</span>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* Collapsible Full Markdown Report */}
-          {showFullAiReport && aegisAnalysis.rawReport && (
-            <div className="mt-space-md p-space-md bg-surface-container-low rounded-xl border border-outline-variant/30 text-sm leading-relaxed text-on-surface whitespace-pre-line font-mono">
-              {aegisAnalysis.rawReport}
-            </div>
-          )}
-        </div>
+        </Card>
       )}
 
-      {/* 3-Route Side-by-Side Cards (Grid) */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-space-md">
-        {/* Fastest Route Card */}
-        {fastestRoute && (
-          <div
-            className={`relative bg-surface-container-lowest rounded-2xl p-space-lg flex flex-col justify-between shadow-sm border ${selectedRouteId === fastestRoute.id ? 'border-secondary ring-2 ring-secondary/30' : 'border-surface-container'}`}
-          >
-            <div>
-              <div className="flex items-center justify-between gap-space-xs mb-space-md">
-                <div className="flex items-center gap-space-xs">
-                  <span className="w-9 h-9 rounded-xl bg-surface-container flex items-center justify-center font-bold text-sm text-on-surface-variant border border-outline-variant/30">
-                    A
-                  </span>
-                  <div>
-                    <span className="text-[11px] font-semibold text-on-surface-variant uppercase tracking-[0.06em] block">
-                      Fastest available route
-                    </span>
-                    <h3
-                      className="text-[22px] text-on-surface font-bold tracking-tight"
-                    >
-                      ⚡ {fastestRoute.label || 'Fastest Route'}
-                    </h3>
-                  </div>
-                </div>
-                <span className="px-2.5 py-1 rounded-full bg-error-container text-on-error-container font-data-badge text-[11px] font-bold tracking-wider uppercase">
-                  AQI {getAqiCategory(fastestRoute.avgAqi)}
-                </span>
-              </div>
+      {/* -------------------------------------------------------------
+          SIDE-BY-SIDE CORRIDOR COMPARISON CARDS (GRID)
+          ------------------------------------------------------------- */}
+      <div>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-bold text-slate-900 tracking-tight flex items-center gap-2">
+            <span className="material-symbols-outlined text-[20px] text-[#15803d]">alt_route</span>
+            Candidate Corridors ({routes.length})
+          </h2>
+          <span className="text-xs text-slate-500 font-medium">Click card to select corridor</span>
+        </div>
 
-              <div className="grid grid-cols-2 gap-space-xs mb-space-md">
-                <div className="bg-surface-container-low rounded-xl p-space-sm border border-surface-container">
-                  <span className="text-[12px] font-medium text-on-surface-variant block">Travel Time</span>
-                  <span className="text-[22px] text-on-surface font-bold tracking-tight block tabular-nums">
-                    {fastestRoute.durationMinutes} <span className="text-[14px] font-normal text-on-surface-variant">min</span>
-                  </span>
-                  <span className="text-[11px] text-secondary font-semibold uppercase tracking-wider block mt-0.5 font-data-badge">
-                    Fastest pace
-                  </span>
-                </div>
-                <div className="bg-surface-container-low rounded-xl p-space-sm border border-surface-container">
-                  <span className="text-[12px] font-medium text-on-surface-variant block">Distance</span>
-                  <span className="text-[22px] text-on-surface font-bold tracking-tight block tabular-nums">
-                    {fastestRoute.distanceKm} <span className="text-[14px] font-normal text-on-surface-variant">km</span>
-                  </span>
-                  <span className="text-[11px] text-on-surface-variant uppercase tracking-wider block mt-0.5 font-data-badge">
-                    Modeled route estimate
-                  </span>
-                </div>
-              </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+          {routes.map((r, idx) => {
+            const isRec = r.id === recommendedRoute?.id;
+            const isFast = r.isFastest;
+            const isSelected = r.id === selectedRoute?.id;
+            const t = getRouteTime(r);
+            const d = Number(r.distanceKm ?? r.distance ?? 0);
+            const aqi = Number(r.avgAqi ?? r.aqi ?? 50);
+            const score = Number(r.healthScore ?? r.score ?? 85);
 
-              <div className="space-y-space-md text-on-surface">
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-[13px] text-on-surface-variant flex items-center gap-1 font-medium">
-                      <span className="material-symbols-outlined text-[16px]">air</span> Avg. AQI
-                    </span>
-                    <span className="text-[17px] text-error font-bold tracking-tight font-data-badge">
-                      {fastestRoute.avgAqi ?? '—'} {getAqiCategory(fastestRoute.avgAqi)}
-                    </span>
-                  </div>
-                  <div className="w-full h-2.5 rounded-full bg-surface-container overflow-hidden">
-                    <div className="h-full bg-error rounded-full" style={{ width: getBarWidth(fastestRoute.avgAqi, 200) }} />
-                  </div>
-                  <span className="text-[11px] text-on-surface-variant block mt-1 tracking-tight">
-                    Heavy tailpipe emissions along arterial traffic
-                  </span>
-                </div>
-
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-[13px] text-on-surface-variant flex items-center gap-1 font-medium">
-                      <span className="material-symbols-outlined text-[16px]">ecg</span> Profile Score
-                    </span>
-                    <span className="text-[17px] text-on-surface font-bold tracking-tight font-data-badge">
-                      {fastestRoute.healthScore ?? '—'} <span className="text-[13px] font-normal text-on-surface-variant">/ 100</span>
-                    </span>
-                  </div>
-                  <div className="w-full h-2.5 rounded-full bg-surface-container overflow-hidden">
-                    <div className="h-full bg-error/70 rounded-full" style={{ width: getBarWidth(fastestRoute.healthScore) }} />
-                  </div>
-                </div>
-
-                <div className="pt-space-sm space-y-space-xs text-[13px]">
-                  <div className="flex justify-between py-1.5 bg-surface-container-low px-space-sm rounded-lg">
-                    <span className="text-on-surface-variant">Traffic Intensity</span>
-                    <span className="font-semibold text-on-surface">{fastestRoute.traffic ?? '—'} / 100</span>
-                  </div>
-                  <div className="flex justify-between py-1.5 bg-surface-container-low px-space-sm rounded-lg">
-                    <span className="text-on-surface-variant">Data source</span>
-                    <span className="font-semibold text-on-surface">Modeled estimate</span>
-                  </div>
-                  <div className="flex justify-between py-1.5 bg-surface-container-low px-space-sm rounded-lg">
-                    <span className="text-on-surface-variant">Route label</span>
-                    <span className="font-semibold text-on-surface">{fastestRoute.label}</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="mt-space-lg pt-space-sm">
-              <button
-                type="button"
-                onClick={() => handleSelectRoute(fastestRoute.id)}
-                className={`w-full h-11 rounded-xl font-label-md text-label-md font-semibold transition-colors flex items-center justify-center gap-space-xs cursor-pointer border ${selectedRouteId === fastestRoute.id ? 'bg-[#ecfdf5] text-[#14532d] border-[#86efac]' : 'bg-surface-container hover:bg-surface-container-high text-on-surface border-outline-variant/30'}`}
+            return (
+              <div
+                key={r.id || idx}
+                onClick={() => handleSelect(r.id)}
+                className={`relative rounded-3xl p-5 transition-all duration-200 cursor-pointer flex flex-col justify-between border ${
+                  isSelected
+                    ? 'bg-white border-2 border-[#15803d] shadow-lift ring-4 ring-[#86efac]/30 scale-[1.01]'
+                    : isRec
+                    ? 'bg-emerald-50/40 border-[#a7f3d0] hover:border-[#15803d]/60 hover:shadow-soft'
+                    : 'bg-white border-slate-200 hover:border-slate-300 hover:shadow-soft'
+                }`}
               >
-                <span className="material-symbols-outlined text-[18px]">{selectedRouteId === fastestRoute.id ? 'check' : 'bolt'}</span>
-                <span>{selectedRouteId === fastestRoute.id ? 'Selected' : 'Select fastest'}</span>
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Cleanest Recommended Route Card (Center Highlight) */}
-        {recommendedRoute && (
-          <div
-            className={`relative bg-white rounded-2xl p-space-lg flex flex-col justify-between shadow-xl transition-all duration-300 border-2 ${selectedRouteId === recommendedRoute.id ? 'ring-2 ring-secondary border-[#15803d]' : 'border-[#dcece2]'}`}
-            style={{
-              boxShadow: 'rgb(134, 239, 172) 0px 14px 0px 0px, rgba(20, 83, 45, 0.18) 0px 20px 32px',
-            }}
-          >
-            {/* Top Recommended Floating Badge */}
-            <div
-              className="absolute -top-4 left-1/2 -translate-x-1/2 px-space-md py-1.5 rounded-full text-white text-[11px] font-bold uppercase tracking-[0.08em] flex items-center gap-1.5 shadow-md border border-[#a7f3d0] font-data-badge"
-              style={{ background: 'linear-gradient(90deg, rgb(21, 128, 61) 0%, rgb(22, 101, 52) 100%)' }}
-            >
-              <span className="material-symbols-outlined text-[15px]">verified</span>
-              RECOMMENDED CHOICE
-            </div>
-
-            <div>
-              <div className="flex items-center justify-between gap-space-xs mb-space-md mt-1">
-                <div className="flex items-center gap-space-xs">
-                  <span className="w-9 h-9 rounded-xl bg-[#dcfce7] flex items-center justify-center text-[#15803d] font-bold text-sm border border-[#86efac]">
-                    B
-                  </span>
-                  <div>
-                    <span className="text-[11px] font-semibold text-secondary uppercase tracking-[0.06em] block">
-                      Recommended route
-                    </span>
-                    <h3
-                      className="text-[22px] text-primary font-bold tracking-tight"
-                    >
-                      🌱 {recommendedRoute.label || 'Cleanest Route'}
-                    </h3>
+                {/* Selection Tag */}
+                {isSelected && (
+                  <div className="absolute -top-3 right-5 px-3 py-0.5 rounded-full bg-[#15803d] text-white text-[11px] font-bold shadow-sm flex items-center gap-1">
+                    <span className="material-symbols-outlined text-[13px]">check_circle</span>
+                    ACTIVE SELECTION
                   </div>
-                </div>
-                <span className="px-2.5 py-1 rounded-full bg-[#dcfce7] text-[#166534] font-data-badge text-[11px] font-bold tracking-wider uppercase border border-[#86efac]">
-                  Score {recommendedRoute.healthScore ?? '—'}/100
-                </span>
-              </div>
-
-              <div className="grid grid-cols-2 gap-space-xs mb-space-md">
-                <div className="bg-[#f0fdf4] rounded-xl p-space-sm border border-[#a7f3d0]">
-                  <span className="text-[12px] font-semibold text-[#166534] block">Travel Time</span>
-                  <span className="text-[22px] text-primary font-bold tracking-tight block tabular-nums">
-                    {recommendedRoute.durationMinutes} <span className="text-[14px] font-normal text-on-surface-variant">min</span>
-                  </span>
-                  <span className="text-[11px] text-on-surface-variant uppercase tracking-wider block mt-0.5 font-data-badge">
-                    {recommendedTimeDelta ?? '—'} min vs fastest
-                  </span>
-                </div>
-                <div className="bg-[#f0fdf4] rounded-xl p-space-sm border border-[#a7f3d0]">
-                  <span className="text-[12px] font-semibold text-[#166534] block">Distance</span>
-                  <span className="text-[22px] text-primary font-bold tracking-tight block tabular-nums">
-                    {recommendedRoute.distanceKm} <span className="text-[14px] font-normal text-on-surface-variant">km</span>
-                  </span>
-                  <span className="text-[11px] text-secondary uppercase tracking-wider block font-bold mt-0.5 font-data-badge">
-                    Modeled route estimate
-                  </span>
-                </div>
-              </div>
-
-              <div className="space-y-space-md text-on-surface">
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-[13px] text-on-surface-variant flex items-center gap-1 font-medium">
-                      <span className="material-symbols-outlined text-[16px]">air</span> Avg. AQI
-                    </span>
-                    <span className="text-[17px] text-secondary font-bold tracking-tight font-data-badge">
-                      {recommendedRoute.avgAqi} Moderate
-                    </span>
-                  </div>
-                  <div className="w-full h-2.5 rounded-full bg-surface-container overflow-hidden">
-                    <div className="h-full bg-secondary rounded-full" style={{ width: '38%' }} />
-                  </div>
-                  <span className="text-[11px] text-secondary block mt-1 font-semibold tracking-tight">
-                    AQI is estimated from sampled route points.
-                  </span>
-                </div>
+                )}
 
                 <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-[13px] text-on-surface-variant flex items-center gap-1 font-medium">
-                      <span className="material-symbols-outlined text-[16px]">ecg</span> Respiratory Score
-                    </span>
-                    <span className="text-[17px] text-secondary font-bold tracking-tight font-data-badge">
-                      {recommendedRoute.healthScore || 89} <span className="text-[13px] font-normal text-on-surface-variant">/ 100</span>
-                    </span>
+                  {/* Card Header */}
+                  <div className="flex items-start justify-between gap-2 mb-3">
+                    <div>
+                      <div className="flex items-center gap-1.5 mb-1">
+                        {isRec && (
+                          <Badge variant="mint" size="sm" icon="eco">
+                            Cleanest
+                          </Badge>
+                        )}
+                        {isFast && (
+                          <Badge variant="outline" size="sm" icon="speed">
+                            Fastest
+                          </Badge>
+                        )}
+                      </div>
+                      <h3 className="font-extrabold text-base sm:text-lg text-slate-900 leading-snug">
+                        {r.label || r.name || `Corridor ${idx + 1}`}
+                      </h3>
+                    </div>
+
+                    <AqiBadge aqi={aqi} size="sm" />
                   </div>
-                  <div className="w-full h-2.5 rounded-full bg-surface-container overflow-hidden">
-                    <div className="h-full bg-secondary rounded-full" style={{ width: '89%' }} />
+
+                  {/* High-level stats */}
+                  <div className="grid grid-cols-3 gap-2 py-3 border-y border-slate-100 my-3 text-center">
+                    <div className="bg-slate-50/80 rounded-xl p-2 border border-slate-200/50">
+                      <span className="text-[10px] font-mono uppercase text-slate-400 block font-bold">Time</span>
+                      <span className="font-mono text-base font-extrabold text-slate-900">{t}m</span>
+                    </div>
+
+                    <div className="bg-slate-50/80 rounded-xl p-2 border border-slate-200/50">
+                      <span className="text-[10px] font-mono uppercase text-slate-400 block font-bold">Distance</span>
+                      <span className="font-mono text-base font-extrabold text-slate-900">{d} km</span>
+                    </div>
+
+                    <div className="bg-slate-50/80 rounded-xl p-2 border border-slate-200/50">
+                      <span className="text-[10px] font-mono uppercase text-slate-400 block font-bold">Health</span>
+                      <span className="font-mono text-base font-extrabold text-[#15803d]">{score}</span>
+                    </div>
+                  </div>
+
+                  {/* Exposure Bar */}
+                  <div className="space-y-2 text-xs pt-1">
+                    <div>
+                      <div className="flex justify-between text-[11px] text-slate-500 mb-1">
+                        <span className="font-medium">Air Quality Severity</span>
+                        <span className="font-mono font-bold text-slate-700">{getAqiCategory(aqi)} (AQI {aqi})</span>
+                      </div>
+                      <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+                        <div
+                          className="h-full rounded-full transition-all duration-700 ease-out"
+                          style={{
+                            width: animated ? getBarWidth(aqi, 200) : '0%',
+                            backgroundColor: getAqiColor(aqi),
+                          }}
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="flex justify-between text-[11px] text-slate-500 mb-1">
+                        <span className="font-medium">Lung Protection Score</span>
+                        <span className="font-mono font-bold text-[#15803d]">{score} / 100</span>
+                      </div>
+                      <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-[#15803d] rounded-full transition-all duration-700 ease-out"
+                          style={{
+                            width: animated ? getBarWidth(score, 100) : '0%',
+                          }}
+                        />
+                      </div>
+                    </div>
                   </div>
                 </div>
 
-                <div className="pt-space-sm space-y-space-xs text-[13px]">
-                  <div className="flex justify-between py-1.5 bg-[#f0fdf4] px-space-sm rounded-lg border border-[#d1fae5]">
-                    <span className="text-on-surface-variant">Traffic Intensity</span>
-                    <span className="font-bold text-primary">{recommendedRoute.traffic ?? '—'} / 100</span>
-                  </div>
-                  <div className="flex justify-between py-1.5 bg-[#f0fdf4] px-space-sm rounded-lg border border-[#d1fae5]">
-                    <span className="text-on-surface-variant">Data source</span>
-                    <span className="font-semibold text-on-surface">Modeled estimate</span>
-                  </div>
-                  <div className="flex justify-between py-1.5 bg-[#f0fdf4] px-space-sm rounded-lg border border-[#d1fae5]">
-                    <span className="text-on-surface-variant">Profile</span>
-                    <span className="font-bold text-primary">{activeProfile}</span>
-                  </div>
-                </div>
-              </div>
-            </div>
+                {/* Card Action */}
+                <div className="pt-4 mt-4 border-t border-slate-100 flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleSelect(r.id);
+                    }}
+                    className={`flex-1 h-9 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1 ${
+                      isSelected
+                        ? 'bg-[#15803d] text-white shadow-xs'
+                        : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                    }`}
+                  >
+                    <span>{isSelected ? 'Selected' : 'Select'}</span>
+                  </button>
 
-            <div className="mt-space-lg pt-space-sm">
-              <button
-                type="button"
-                onClick={() => handleSelectRoute(recommendedRoute.id)}
-                className={`w-full h-11 rounded-xl font-label-md text-label-md font-semibold transition-colors flex items-center justify-center gap-space-xs cursor-pointer border ${selectedRouteId === recommendedRoute.id ? 'bg-[#ecfdf5] text-[#14532d] border-[#86efac]' : 'bg-surface-container-lowest text-[#14532d] border-[#a7f3d0] hover:bg-[#ecfdf5]'}`}
-              >
-                <span className="material-symbols-outlined text-[18px]">{selectedRouteId === recommendedRoute.id ? 'check' : 'eco'}</span>
-                <span>{selectedRouteId === recommendedRoute.id ? 'Selected' : 'Select recommended'}</span>
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Alternative Route Card */}
-        {alternativeRoute && (
-          <div
-            className="relative bg-white rounded-2xl p-space-lg flex flex-col justify-between shadow-sm border border-[#99f6e4]"
-            style={{
-              boxShadow: 'rgb(204, 251, 241) 0px 8px 0px 0px, rgba(15, 118, 110, 0.08) 0px 16px 24px',
-            }}
-          >
-            <div>
-              <div className="flex items-center justify-between gap-space-xs mb-space-md">
-                <div className="flex items-center gap-space-xs">
-                  <span className="w-9 h-9 rounded-xl bg-[#ccfbf1] text-[#0f766e] flex items-center justify-center font-bold text-sm border border-[#99f6e4]">
-                    C
-                  </span>
-                  <div>
-                    <span className="text-[11px] font-semibold text-[#0f766e] uppercase tracking-[0.06em] block">
-                      Alternative route
-                    </span>
-                    <h3
-                      className="text-[22px] text-[#0f766e] font-bold tracking-tight"
-                    >
-                      🌿 {alternativeRoute.label || 'Ultra Clean'}
-                    </h3>
-                  </div>
-                </div>
-                <span className="px-2.5 py-1 rounded-full bg-[#ccfbf1] text-[#0f766e] font-data-badge text-[11px] font-bold tracking-wider uppercase border border-[#99f6e4]">
-                  AQI {getAqiCategory(alternativeRoute.avgAqi)}
-                </span>
-              </div>
-
-              <div className="grid grid-cols-2 gap-space-xs mb-space-md">
-                <div className="bg-[#f0fdfa] rounded-xl p-space-sm border border-[#ccfbf1]">
-                  <span className="text-[12px] font-medium text-[#0f766e] block">Travel Time</span>
-                  <span className="text-[22px] text-on-surface font-bold tracking-tight block tabular-nums">
-                    {alternativeRoute.durationMinutes} <span className="text-[14px] font-normal text-on-surface-variant">min</span>
-                  </span>
-                  <span className="text-[11px] text-on-surface-variant uppercase tracking-wider block mt-0.5 font-data-badge">
-                    {Math.max(0, getRouteTime(alternativeRoute) - fastestDuration).toFixed(1)} min vs fastest
-                  </span>
-                </div>
-                <div className="bg-[#f0fdfa] rounded-xl p-space-sm border border-[#ccfbf1]">
-                  <span className="text-[12px] font-medium text-[#0f766e] block">Distance</span>
-                  <span className="text-[22px] text-on-surface font-bold tracking-tight block tabular-nums">
-                    {alternativeRoute.distanceKm} <span className="text-[14px] font-normal text-on-surface-variant">km</span>
-                  </span>
-                  <span className="text-[11px] text-[#0f766e] uppercase tracking-wider block font-bold mt-0.5 font-data-badge">
-                    Route distance
-                  </span>
-                </div>
-              </div>
-
-              <div className="space-y-space-md text-on-surface">
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-[13px] text-on-surface-variant flex items-center gap-1 font-medium">
-                      <span className="material-symbols-outlined text-[16px]">air</span> Avg. AQI
-                    </span>
-                    <span className="text-[17px] text-secondary font-bold tracking-tight font-data-badge">
-                      {alternativeRoute.avgAqi} Good
-                    </span>
-                  </div>
-                  <div className="w-full h-2.5 rounded-full bg-surface-container overflow-hidden">
-                    <div className="h-full bg-[#2dd4bf] rounded-full" style={{ width: '25%' }} />
-                  </div>
-                  <span className="text-[11px] text-secondary block mt-1 font-semibold tracking-tight">
-                    AQI is estimated from sampled route points.
-                  </span>
-                </div>
-
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-[13px] text-on-surface-variant flex items-center gap-1 font-medium">
-                      <span className="material-symbols-outlined text-[16px]">ecg</span> Respiratory Score
-                    </span>
-                    <span className="text-[17px] text-secondary font-bold tracking-tight font-data-badge">
-                      {alternativeRoute.healthScore || 94} <span className="text-[13px] font-normal text-on-surface-variant">/ 100</span>
-                    </span>
-                  </div>
-                  <div className="w-full h-2.5 rounded-full bg-surface-container overflow-hidden">
-                    <div className="h-full bg-secondary rounded-full" style={{ width: '94%' }} />
-                  </div>
-                </div>
-
-                <div className="pt-space-sm space-y-space-xs text-[13px]">
-                  <div className="flex justify-between py-1.5 bg-[#f0fdfa] px-space-sm rounded-lg border border-[#ccfbf1]">
-                    <span className="text-on-surface-variant">Traffic Intensity</span>
-                    <span className="font-semibold text-[#0f766e]">{alternativeRoute.traffic ?? '—'} / 100</span>
-                  </div>
-                  <div className="flex justify-between py-1.5 bg-[#f0fdfa] px-space-sm rounded-lg border border-[#ccfbf1]">
-                    <span className="text-on-surface-variant">Data source</span>
-                    <span className="font-semibold text-on-surface">Modeled estimate</span>
-                  </div>
-                  <div className="flex justify-between py-1.5 bg-[#f0fdfa] px-space-sm rounded-lg border border-[#ccfbf1]">
-                    <span className="text-on-surface-variant">Profile</span>
-                    <span className="font-bold text-primary">{activeProfile}</span>
-                  </div>
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    icon="navigation"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleSelect(r.id);
+                      if (onStartNavigation) onStartNavigation(r.id);
+                    }}
+                    className="h-9 px-3 bg-[#16a34a] hover:bg-[#15803d] text-white font-bold"
+                    title="Start navigating this corridor"
+                  >
+                    Go
+                  </Button>
                 </div>
               </div>
-            </div>
-
-            <div className="mt-space-lg pt-space-sm">
-              <button
-                type="button"
-                onClick={() => handleSelectRoute(alternativeRoute.id)}
-                className={`w-full h-11 rounded-xl font-label-md text-label-md font-semibold transition-colors flex items-center justify-center gap-space-xs cursor-pointer border ${selectedRouteId === alternativeRoute.id ? 'bg-[#ccfbf1] text-[#0f766e] border-[#5eead4]' : 'bg-surface-container-lowest text-[#0f766e] border-[#99f6e4] hover:bg-[#f0fdfa]'}`}
-              >
-                <span className="material-symbols-outlined text-[18px]">{selectedRouteId === alternativeRoute.id ? 'check' : 'alt_route'}</span>
-                <span>{selectedRouteId === alternativeRoute.id ? 'Selected' : 'Select alternative'}</span>
-              </button>
-            </div>
-          </div>
-        )}
+            );
+          })}
+        </div>
       </div>
 
-      <div className="flex flex-col sm:flex-row sm:items-center justify-end gap-space-sm">
-        <p className="mr-auto text-body-sm text-on-surface-variant">
-          Selected: <span className="font-semibold text-on-surface">{activeRoute?.label || 'No route'}</span>
-        </p>
-        <button
-          type="button"
-          onClick={() => activeRoute && onStartNavigation?.(activeRoute.id)}
-          disabled={!activeRoute}
-          className="inline-flex min-h-11 items-center justify-center gap-space-xs rounded-xl bg-[#14532d] px-space-lg text-white font-label-md text-label-md font-semibold shadow-sm transition-colors hover:bg-[#166534] disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          <span className="material-symbols-outlined text-[18px]">navigation</span>
-          Start selected route
-        </button>
-      </div>
-
-      {/* Deep-Dive Analytical Matrix Table */}
-      <div
-        className="bg-surface-container-lowest rounded-3xl p-space-lg md:p-space-xl shadow-sm mb-space-2xl overflow-hidden border border-[#dcece2]"
-        style={{
-          boxShadow: 'rgb(220, 233, 255) 0px 10px 0px 0px, rgba(11, 28, 48, 0.08) 0px 18px 28px',
-        }}
-      >
-        <div className="flex items-center justify-between mb-space-lg">
+      {/* -------------------------------------------------------------
+          DETAILED METRIC COMPARISON MATRIX TABLE
+          ------------------------------------------------------------- */}
+      <Card variant="default" p="none" className="overflow-hidden border-slate-200/90 shadow-soft rounded-3xl">
+        <div className="p-5 sm:p-6 bg-slate-50/70 border-b border-slate-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
-            <h2
-              className="text-[26px] md:text-[30px] leading-tight text-primary font-bold tracking-tight"
-            >
-              Route <span className="italic font-normal text-secondary">Score Details</span>
+            <h2 className="text-lg font-extrabold text-slate-900 tracking-tight">
+              Detailed Metric Breakdown
             </h2>
-            <p className="font-body-md text-body-md text-on-surface-variant">
-              Experimental AQI and traffic estimates along candidate corridors; not live measurements.
+            <p className="text-xs text-slate-500 mt-0.5">
+              Side-by-side comparison across atmospheric telemetry, travel efficiency, and respiratory impact.
             </p>
           </div>
-          <span className="hidden md:inline-flex items-center gap-1 font-data-badge text-data-badge text-on-surface-variant bg-surface-container px-space-sm py-1 rounded-full border border-outline-variant/30">
-            <span className="material-symbols-outlined text-[14px]">info</span> Estimate only
+          <span className="text-xs font-mono font-semibold text-[#15803d] bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200 self-start sm:self-auto">
+            Green pill = Optimal corridor value
           </span>
         </div>
 
-        <div className="overflow-x-auto rounded-2xl border border-surface-container">
-          <table className="w-full text-left border-collapse font-ui">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse">
             <thead>
-              <tr className="bg-surface-container text-on-surface-variant text-[13px] uppercase tracking-wider font-semibold">
-                <th className="py-space-md px-space-md font-bold">Route</th>
-                <th className="py-space-md px-space-md font-bold">Distance</th>
-                <th className="py-space-md px-space-md font-bold">Est. time</th>
-                <th className="py-space-md px-space-md font-bold">AQI estimate</th>
-                <th className="py-space-md px-space-md font-bold">Traffic estimate</th>
-                <th className="py-space-md px-space-md font-bold">Profile score</th>
+              <tr className="border-b border-slate-200/80 bg-white text-xs font-mono uppercase tracking-wider text-slate-500">
+                <th className="py-4 px-6 font-bold w-1/4">Environmental Metric</th>
+                {routes.map((r) => {
+                  const isRec = r.id === recommendedRoute?.id;
+                  const isSelected = r.id === selectedRoute?.id;
+                  return (
+                    <th
+                      key={r.id}
+                      className={`py-4 px-6 text-center ${
+                        isSelected ? 'bg-emerald-50/50 border-x border-[#86efac]/60' : ''
+                      }`}
+                    >
+                      <div className="flex flex-col items-center gap-1.5">
+                        <span className="font-extrabold text-sm text-slate-900 normal-case font-sans">
+                          {r.label || r.name}
+                        </span>
+                        <div className="flex items-center gap-1">
+                          {isRec && <Badge variant="mint" size="sm">Recommended</Badge>}
+                          {r.isFastest && <Badge variant="outline" size="sm">Fastest</Badge>}
+                        </div>
+                      </div>
+                    </th>
+                  );
+                })}
               </tr>
             </thead>
-            <tbody className="text-[14px] text-on-surface divide-y divide-surface-container">
-              {routes.map((route) => (
-                <tr key={route.id}>
-                  <td className="py-space-md px-space-md font-semibold text-primary">
-                    {route.label || route.name || route.id}
-                    {route.isRecommended && <span className="ml-2 text-[11px] text-secondary"> Recommended</span>}
-                  </td>
-                  <td className="py-space-md px-space-md font-data-badge">{route.distanceKm ?? '—'} km</td>
-                  <td className="py-space-md px-space-md font-data-badge">{route.durationMinutes ?? route.time ?? '—'} min</td>
-                  <td className="py-space-md px-space-md font-data-badge">{route.avgAqi ?? '—'} · {getAqiCategory(route.avgAqi)}</td>
-                  <td className="py-space-md px-space-md font-data-badge">{route.traffic ?? '—'} / 100</td>
-                  <td className="py-space-md px-space-md font-data-badge">{route.healthScore ?? route.score ?? '—'} / 100</td>
-                </tr>
-              ))}
+
+            <tbody className="divide-y divide-slate-100 text-sm font-medium">
+              {/* ROW 1: Average AQI Exposure */}
+              <tr className="hover:bg-slate-50/40 transition-colors">
+                <td className="py-4 px-6 font-semibold text-slate-800">
+                  <div className="flex items-center gap-2.5">
+                    <span className="w-8 h-8 rounded-xl bg-emerald-50 text-[#15803d] flex items-center justify-center border border-emerald-200/60">
+                      <span className="material-symbols-outlined text-[18px]">air</span>
+                    </span>
+                    <div>
+                      <span className="block font-bold">Average AQI Exposure</span>
+                      <span className="text-[11px] text-slate-400 font-normal">Lower is cleaner</span>
+                    </div>
+                  </div>
+                </td>
+                {routes.map((r) => {
+                  const aqi = Number(r.avgAqi ?? r.aqi ?? 50);
+                  const isBest = aqi === minAqi;
+                  const isSelected = r.id === selectedRoute?.id;
+                  const color = getAqiColor(aqi);
+                  return (
+                    <td
+                      key={r.id}
+                      className={`py-4 px-6 text-center ${
+                        isSelected ? 'bg-emerald-50/30 border-x border-[#86efac]/40' : ''
+                      }`}
+                    >
+                      <div className="flex items-center justify-center gap-2">
+                        <AqiBadge aqi={aqi} size="sm" />
+                        {isBest && <Badge variant="mint" size="sm">Cleanest</Badge>}
+                      </div>
+                      <div className="w-28 mx-auto h-1.5 bg-slate-100 rounded-full overflow-hidden mt-2">
+                        <div
+                          className="h-full rounded-full transition-all duration-700 ease-out"
+                          style={{
+                            width: animated ? getBarWidth(aqi, 200) : '0%',
+                            backgroundColor: color,
+                          }}
+                        />
+                      </div>
+                    </td>
+                  );
+                })}
+              </tr>
+
+              {/* ROW 2: Travel Duration */}
+              <tr className="hover:bg-slate-50/40 transition-colors">
+                <td className="py-4 px-6 font-semibold text-slate-800">
+                  <div className="flex items-center gap-2.5">
+                    <span className="w-8 h-8 rounded-xl bg-blue-50 text-blue-700 flex items-center justify-center border border-blue-200/60">
+                      <span className="material-symbols-outlined text-[18px]">schedule</span>
+                    </span>
+                    <div>
+                      <span className="block font-bold">Travel Duration</span>
+                      <span className="text-[11px] text-slate-400 font-normal">Estimated trip time</span>
+                    </div>
+                  </div>
+                </td>
+                {routes.map((r) => {
+                  const t = getRouteTime(r);
+                  const isBest = t === minTime;
+                  const isSelected = r.id === selectedRoute?.id;
+                  return (
+                    <td
+                      key={r.id}
+                      className={`py-4 px-6 text-center ${
+                        isSelected ? 'bg-emerald-50/30 border-x border-[#86efac]/40' : ''
+                      }`}
+                    >
+                      <div className="flex items-center justify-center gap-2 font-mono">
+                        <span className="font-extrabold text-slate-900 text-base">{t} min</span>
+                        {isBest && <Badge variant="mint" size="sm">Fastest</Badge>}
+                      </div>
+                      <div className="w-28 mx-auto h-1.5 bg-slate-100 rounded-full overflow-hidden mt-2">
+                        <div
+                          className="h-full bg-slate-700 rounded-full transition-all duration-700 ease-out"
+                          style={{
+                            width: animated ? getBarWidth(t, 60) : '0%',
+                          }}
+                        />
+                      </div>
+                    </td>
+                  );
+                })}
+              </tr>
+
+              {/* ROW 3: Distance */}
+              <tr className="hover:bg-slate-50/40 transition-colors">
+                <td className="py-4 px-6 font-semibold text-slate-800">
+                  <div className="flex items-center gap-2.5">
+                    <span className="w-8 h-8 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center border border-slate-200">
+                      <span className="material-symbols-outlined text-[18px]">straighten</span>
+                    </span>
+                    <div>
+                      <span className="block font-bold">Total Distance</span>
+                      <span className="text-[11px] text-slate-400 font-normal">Total route length</span>
+                    </div>
+                  </div>
+                </td>
+                {routes.map((r) => {
+                  const d = Number(r.distanceKm ?? r.distance ?? 0);
+                  const isBest = d === minDist;
+                  const isSelected = r.id === selectedRoute?.id;
+                  return (
+                    <td
+                      key={r.id}
+                      className={`py-4 px-6 text-center ${
+                        isSelected ? 'bg-emerald-50/30 border-x border-[#86efac]/40' : ''
+                      }`}
+                    >
+                      <div className="flex items-center justify-center gap-2 font-mono">
+                        <span className="font-extrabold text-slate-900 text-base">{d} km</span>
+                        {isBest && <Badge variant="mint" size="sm">Shortest</Badge>}
+                      </div>
+                      <div className="w-28 mx-auto h-1.5 bg-slate-100 rounded-full overflow-hidden mt-2">
+                        <div
+                          className="h-full bg-slate-500 rounded-full transition-all duration-700 ease-out"
+                          style={{
+                            width: animated ? getBarWidth(d, 10) : '0%',
+                          }}
+                        />
+                      </div>
+                    </td>
+                  );
+                })}
+              </tr>
+
+              {/* ROW 4: Lung Health Score */}
+              <tr className="hover:bg-slate-50/40 transition-colors">
+                <td className="py-4 px-6 font-semibold text-slate-800">
+                  <div className="flex items-center gap-2.5">
+                    <span className="w-8 h-8 rounded-xl bg-emerald-50 text-[#15803d] flex items-center justify-center border border-emerald-200/60">
+                      <span className="material-symbols-outlined text-[18px]">health_and_safety</span>
+                    </span>
+                    <div>
+                      <span className="block font-bold">Lung Health Score</span>
+                      <span className="text-[11px] text-slate-400 font-normal">0-100 respiratory index</span>
+                    </div>
+                  </div>
+                </td>
+                {routes.map((r) => {
+                  const score = Number(r.healthScore ?? r.score ?? 85);
+                  const isBest = score === maxScore;
+                  const isSelected = r.id === selectedRoute?.id;
+                  return (
+                    <td
+                      key={r.id}
+                      className={`py-4 px-6 text-center ${
+                        isSelected ? 'bg-emerald-50/30 border-x border-[#86efac]/40' : ''
+                      }`}
+                    >
+                      <div className="flex items-center justify-center gap-2 font-mono">
+                        <span className="font-extrabold text-slate-900 text-base">{score} / 100</span>
+                        {isBest && <Badge variant="mint" size="sm">Optimal</Badge>}
+                      </div>
+                      <div className="w-28 mx-auto h-1.5 bg-slate-100 rounded-full overflow-hidden mt-2">
+                        <div
+                          className="h-full bg-[#15803d] rounded-full transition-all duration-700 ease-out"
+                          style={{
+                            width: animated ? getBarWidth(score, 100) : '0%',
+                          }}
+                        />
+                      </div>
+                    </td>
+                  );
+                })}
+              </tr>
+
+              {/* ROW 5: Traffic Congestion Level */}
+              <tr className="hover:bg-slate-50/40 transition-colors">
+                <td className="py-4 px-6 font-semibold text-slate-800">
+                  <div className="flex items-center gap-2.5">
+                    <span className="w-8 h-8 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center border border-amber-200/60">
+                      <span className="material-symbols-outlined text-[18px]">traffic</span>
+                    </span>
+                    <div>
+                      <span className="block font-bold">Traffic Congestion</span>
+                      <span className="text-[11px] text-slate-400 font-normal">Vehicular exhaust intensity</span>
+                    </div>
+                  </div>
+                </td>
+                {routes.map((r) => {
+                  const isSelected = r.id === selectedRoute?.id;
+                  const traffic = r.trafficLevel || (r.isFastest ? 'High traffic' : r.isRecommended ? 'Low traffic' : 'Moderate traffic');
+                  const isLow = traffic.toLowerCase().includes('low');
+                  return (
+                    <td
+                      key={r.id}
+                      className={`py-4 px-6 text-center ${
+                        isSelected ? 'bg-emerald-50/30 border-x border-[#86efac]/40' : ''
+                      }`}
+                    >
+                      <span
+                        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${
+                          isLow
+                            ? 'bg-emerald-100/70 text-[#15803d]'
+                            : traffic.toLowerCase().includes('moderate')
+                            ? 'bg-amber-100/70 text-amber-800'
+                            : 'bg-red-100/70 text-red-700'
+                        }`}
+                      >
+                        <span className="w-1.5 h-1.5 rounded-full bg-current" />
+                        {traffic}
+                      </span>
+                    </td>
+                  );
+                })}
+              </tr>
             </tbody>
           </table>
+        </div>
+      </Card>
+
+      {/* -------------------------------------------------------------
+          STICKY BOTTOM BAR: SELECTION CONFIRMATION & NAVIGATION
+          ------------------------------------------------------------- */}
+      <div className="fixed bottom-0 left-0 right-0 z-40 bg-white/90 backdrop-blur-xl border-t border-slate-200 shadow-lift py-3 px-4 sm:px-6">
+        <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3 overflow-hidden">
+            <span className="text-xs text-slate-400 uppercase font-mono font-bold hidden sm:inline">Active Choice:</span>
+            <span className="text-sm sm:text-base font-extrabold text-slate-900 truncate">
+              {selectedRoute?.label || recommendedRoute?.label}
+            </span>
+            {selectedRoute && (
+              <AqiBadge aqi={selectedRoute.avgAqi} size="sm" />
+            )}
+          </div>
+
+          <div className="flex items-center gap-2.5 shrink-0">
+            <Button
+              variant="secondary"
+              size="md"
+              icon="arrow_back"
+              onClick={onBackToMap}
+              className="hidden sm:inline-flex bg-white hover:bg-slate-50"
+            >
+              Back to map
+            </Button>
+            <Button
+              variant="primary"
+              size="md"
+              icon="navigation"
+              iconPosition="right"
+              onClick={() =>
+                onStartNavigation &&
+                onStartNavigation(selectedRoute?.id || recommendedRoute?.id)
+              }
+              className="bg-[#16a34a] hover:bg-[#15803d] text-white font-black shadow-md px-5"
+            >
+              Start navigation
+            </Button>
+          </div>
         </div>
       </div>
     </div>

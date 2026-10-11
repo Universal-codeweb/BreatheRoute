@@ -115,17 +115,18 @@ function estimateEnvironment(lng, lat) {
   return { aqi, traffic, level: levelForAqi(aqi) };
 }
 
-function createAqiCells() {
+function createAqiCells(customBounds) {
+  const activeBounds = customBounds || DEMO_BOUNDS;
   const columns = 8;
   const rows = 8;
-  const cellWidth = (DEMO_BOUNDS.east - DEMO_BOUNDS.west) / columns;
-  const cellHeight = (DEMO_BOUNDS.north - DEMO_BOUNDS.south) / rows;
+  const cellWidth = (activeBounds.east - activeBounds.west) / columns;
+  const cellHeight = (activeBounds.north - activeBounds.south) / rows;
   const cells = [];
 
   for (let row = 0; row < rows; row += 1) {
     for (let column = 0; column < columns; column += 1) {
-      const west = DEMO_BOUNDS.west + column * cellWidth;
-      const south = DEMO_BOUNDS.south + row * cellHeight;
+      const west = activeBounds.west + column * cellWidth;
+      const south = activeBounds.south + row * cellHeight;
       const centerLng = west + cellWidth / 2;
       const centerLat = south + cellHeight / 2;
       const { aqi, level } = estimateEnvironment(centerLng, centerLat);
@@ -331,7 +332,23 @@ const server = createServer(async (request, response) => {
       return jsonResponse(response, 200, { status: 'ok', routing: 'Valhalla', map: 'OpenFreeMap', search: 'Photon' });
     }
     if (routePath === '/aqi' && request.method === 'GET') {
-      const cells = createAqiCells();
+      let customBounds = null;
+      const boundsParam = url.searchParams.get('bounds');
+      const centerParam = url.searchParams.get('center');
+      if (boundsParam) {
+        customBounds = parseBounds(boundsParam);
+      } else if (centerParam) {
+        const center = parsePair(centerParam, null);
+        if (center) {
+          customBounds = {
+            west: center[0] - 0.15,
+            south: center[1] - 0.12,
+            east: center[0] + 0.15,
+            north: center[1] + 0.12,
+          };
+        }
+      }
+      const cells = createAqiCells(customBounds);
       return jsonResponse(response, 200, {
         cells,
         averageAqi: Math.round(cells.reduce((sum, cell) => sum + cell.aqi, 0) / cells.length),

@@ -112,6 +112,25 @@ export default {
         "headline-lg": ["32px", { lineHeight: "40px", letterSpacing: "-0.02em", fontWeight: "700" }],
         "body-md": ["16px", { lineHeight: "24px", letterSpacing: "0em", fontWeight: "400" }],
       },
+      boxShadow: {
+        soft: "0 2px 12px -2px rgba(15, 61, 42, 0.06), 0 1px 4px rgba(0, 0, 0, 0.04)",
+        lift: "0 10px 28px -4px rgba(15, 61, 42, 0.10), 0 4px 10px -2px rgba(0, 0, 0, 0.05)",
+        glass: "0 8px 32px 0 rgba(15, 61, 42, 0.08)",
+      },
+      animation: {
+        shimmer: "shimmer 1.8s infinite",
+        "page-enter": "pageFadeSlideUp 250ms cubic-bezier(0.22, 1, 0.36, 1) forwards",
+      },
+      keyframes: {
+        shimmer: {
+          "0%": { transform: "translateX(-100%)" },
+          "100%": { transform: "translateX(100%)" },
+        },
+        pageFadeSlideUp: {
+          "0%": { opacity: "0", transform: "translateY(8px)" },
+          "100%": { opacity: "1", transform: "translateY(0)" },
+        },
+      },
     },
   },
   plugins: [],

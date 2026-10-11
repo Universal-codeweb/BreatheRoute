@@ -18,35 +18,32 @@ import RoutePlanning from './pages/RoutePlanning';
 import MainRouteResultsMap from './pages/MainRouteResultsMap';
 import RouteComparisonMatrix from './pages/RouteComparisonMatrix';
 import ActiveLiveNavigation from './pages/ActiveLiveNavigation';
+import WindBackground from './components/WindBackground';
 import { getRoutes } from './api';
 import { convertAllRoutes } from './adapters';
 import config from './config';
 
+import { EmptyState as UiEmptyState, Button } from './components/ui';
+
 function EmptyState({ icon, title, text, onNavigate }) {
   return (
-    <div className="flex-1 flex items-center justify-center px-6 py-20">
-      <div className="max-w-md w-full text-center bg-white rounded-3xl border border-[#a7f3d0]/70 shadow-xl p-10">
-        <div className="mx-auto w-16 h-16 rounded-2xl bg-[#dcfce7] text-[#15803d] flex items-center justify-center mb-5 border border-[#86efac]">
-          <span className="material-symbols-outlined text-[32px]">{icon}</span>
-        </div>
-        <h2 className="text-[24px] font-bold text-[#14532d] tracking-tight">{title}</h2>
-        <p className="text-on-surface-variant mt-2 mb-6 leading-relaxed">{text}</p>
-        <div className="flex flex-col sm:flex-row gap-3 justify-center">
-          <button
+    <div className="flex-1 flex items-center justify-center px-4 sm:px-6 lg:px-8 py-16 md:py-20">
+      <UiEmptyState
+        icon={icon}
+        title={title}
+        description={text}
+        action={
+          <Button
+            variant="primary"
+            icon="alt_route"
             onClick={() => onNavigate('route-planner', 1)}
-            className="inline-flex items-center justify-center gap-2 h-12 px-6 rounded-xl bg-[#14532d] hover:bg-[#166534] text-white font-semibold shadow-md"
           >
-            <span className="material-symbols-outlined text-[18px]">alt_route</span>
             Plan a route
-          </button>
-          <button
-            onClick={() => onNavigate('landing')}
-            className="inline-flex items-center justify-center h-12 px-6 rounded-xl bg-[#ecfdf5] border border-[#a7f3d0] text-[#14532d] font-semibold hover:bg-[#d1fae5]"
-          >
-            Back to overview
-          </button>
-        </div>
-      </div>
+          </Button>
+        }
+        secondaryActionText="Back to overview"
+        onSecondaryAction={() => onNavigate('landing')}
+      />
     </div>
   );
 }
@@ -65,7 +62,6 @@ export default function App() {
   // ---- route results from the API ----
   const [routes, setRoutes] = useState([]);
   const [selectedRouteId, setSelectedRouteId] = useState(null);
-  const [aegisAnalysis, setAegisAnalysis] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
@@ -96,10 +92,9 @@ export default function App() {
         profile
       );
 
-      const { routes: uiRoutes, recommendedId, aegisAnalysis: aiReport } = convertAllRoutes(apiResponse);
+      const { routes: uiRoutes, recommendedId } = convertAllRoutes(apiResponse);
       setRoutes(uiRoutes);
       setSelectedRouteId(recommendedId);
-      setAegisAnalysis(aiReport);
       hasSearched.current = true;
 
       if (navigateToMap) {
@@ -193,7 +188,15 @@ export default function App() {
   };
 
   const handleEndNavigationSession = () => {
-    setActiveTab('map-explorer');
+    // Reset all route search inputs and state like a fresh user
+    setOrigin(null);
+    setDestination(null);
+    setRoutes([]);
+    setSelectedRouteId(null);
+    setError(null);
+    hasSearched.current = false;
+    setPlannerStep(1);
+    setActiveTab('route-planner');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -221,6 +224,7 @@ export default function App() {
   if (!config.isConfigured) {
     return (
       <div className="min-h-screen bg-surface flex flex-col font-body-md text-on-surface antialiased selection:bg-secondary-container selection:text-on-secondary-container">
+        <WindBackground />
         <Header activeTab={activeTab} setActiveTab={setActiveTab} onNavigate={goTo} profile={profile} />
         <div className="flex-1 flex items-center justify-center p-space-xl">
           <div className="max-w-lg bg-surface-container-lowest rounded-2xl p-space-xl shadow-lg border border-outline-variant/40 text-center">
@@ -253,7 +257,10 @@ export default function App() {
   const selectedRoute = routes.find((r) => r.id === selectedRouteId) || null;
 
   return (
-    <div className="min-h-screen bg-surface flex flex-col font-body-md text-on-surface antialiased selection:bg-secondary-container selection:text-on-secondary-container">
+    <div className="relative min-h-screen bg-[#f8faf9] flex flex-col font-body-md text-on-surface antialiased selection:bg-secondary-container selection:text-on-secondary-container">
+      {/* Realistic atmospheric wind blowing effect across all pages */}
+      <WindBackground />
+
       {/* Persistent App Header */}
       <Header activeTab={activeTab} setActiveTab={setActiveTab} onNavigate={goTo} profile={profile} />
 
@@ -311,7 +318,6 @@ export default function App() {
               setOrigin={setOrigin}
               destination={destination}
               setDestination={setDestination}
-              aegisAnalysis={aegisAnalysis}
               loading={loading}
               error={error}
               onFindRoutes={findRoutes}
@@ -334,7 +340,6 @@ export default function App() {
               origin={origin}
               destination={destination}
               profile={profile}
-              aegisAnalysis={aegisAnalysis}
               loading={loading}
               error={error}
               onBackToMap={handleExploreMap}

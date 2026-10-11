@@ -1,12 +1,25 @@
 // src/pages/RoutePlanning.jsx
 // ------------------------------------------------------------------
 // 4-Step Route Planning Wizard with MapView and PlaceInput.
-// Aligned with Stitch route_planning_preferences UI.
+// Designed with BreatheRoute Award-Winning UI:
+// - Left: 4-step wizard with modern stepper & card-based options
+// - Right: Sticky desktop MapView (collapsible on mobile)
+// - Step 1: Waypoints (Origin & Destination PlaceInput + pick mode)
+// - Step 2: Travel Mode (Walking vs Cycling with speed/ventilation)
+// - Step 3: Health Profile (General, Asthma, Elderly, Child with routing rules)
+// - Step 4: Review & Synthesize (Summary card with Edit links + Find Cleanest Route)
 // ------------------------------------------------------------------
 
 import React, { useState } from 'react';
 import PlaceInput from '../components/PlaceInput';
 import MapView from '../components/MapView';
+import {
+  Card,
+  Button,
+  AqiBadge,
+  Badge,
+  ErrorState,
+} from '../components/ui';
 
 export default function RoutePlanning({
   origin,
@@ -30,73 +43,119 @@ export default function RoutePlanning({
   const [pickMode, setPickMode] = useState(null); // 'origin' | 'destination' | null
   const [previewSelectedId, setPreviewSelectedId] = useState(null);
   const [stepError, setStepError] = useState(null);
+  const [mobileMapOpen, setMobileMapOpen] = useState(false);
 
-  const handleNext = async () => {
+  // Stepper metadata
+  const steps = [
+    { step: 1, title: 'Waypoints', subtitle: 'Start & destination' },
+    { step: 2, title: 'Travel Mode', subtitle: 'Speed & effort' },
+    { step: 3, title: 'Health Profile', subtitle: 'Lung vulnerability' },
+    { step: 4, title: 'Review & Plan', subtitle: 'Cleanest corridor' },
+  ];
+
+  // Travel Mode options
+  const modeOptions = [
+    {
+      id: 'walking',
+      icon: 'directions_walk',
+      title: 'Walking',
+      speed: '~4.5 km/h',
+      ventilation: '12 L/min average',
+      description:
+        'Pedestrian-optimized paths prioritizing tree shade canopies, continuous sidewalks, and low-exhaust residential alleys.',
+      criteria: 'Shade trees · Sidewalks · Zero highway',
+    },
+    {
+      id: 'cycling',
+      icon: 'pedal_bike',
+      title: 'Cycling',
+      speed: '~18.0 km/h',
+      ventilation: '38 L/min (aerobic)',
+      description:
+        'Low-gradient routes (<4%) avoiding stop-and-go intersections and high-particulate diesel idling corridors.',
+      criteria: 'Protected lanes · Low gradient (<4%) · Clean air',
+    },
+  ];
+
+  // Health Profile options
+  const profileOptions = [
+    {
+      id: 'general',
+      icon: 'person',
+      title: 'General Commuter',
+      tag: 'Balanced Inhalation',
+      description:
+        'Standard environmental weighting balancing time, distance, and particulate exposure.',
+    },
+    {
+      id: 'asthma',
+      icon: 'air',
+      title: 'Asthma / Reactive',
+      tag: 'Max PM2.5 Priority',
+      description:
+        'Strict penalty for fine particulates and diesel smoke pockets. Detours around traffic bottlenecks.',
+    },
+    {
+      id: 'elderly',
+      icon: 'nature_people',
+      title: 'Elderly',
+      tag: 'Comfort & Shade',
+      description:
+        'Prioritizes continuous botanical shade, gentle inclines, and paved sidewalk corridors with benches.',
+    },
+    {
+      id: 'child',
+      icon: 'child_care',
+      title: 'Child / Stroller',
+      tag: 'Zero Exhaust Zone',
+      description:
+        'Maximizes park buffer zones away from tailpipe levels, avoiding high-speed multi-lane road crossings.',
+    },
+  ];
+
+  const profileLabels = {
+    general: 'General Commuter',
+    asthma: 'Asthma / Reactive',
+    elderly: 'Elderly',
+    child: 'Child / Stroller',
+  };
+
+  // Step navigation handlers
+  const handleNext = () => {
+    setStepError(null);
+
     if (currentStep === 1) {
       if (!origin || !destination) {
-        setStepError('Choose both a start location and a destination to continue.');
+        setStepError('Please select both a starting location and a destination.');
         return;
       }
       if (origin.lat === destination.lat && origin.lng === destination.lng) {
-        setStepError('Start and destination must be different locations.');
+        setStepError('Origin and destination cannot be the same location.');
         return;
       }
     }
 
-    if (currentStep === 3) {
-      setStepError(null);
-      const succeeded = await onFindRoutes({ navigateToMap: false });
-      if (succeeded) setCurrentStep(4);
-      return;
-    }
-
-    setStepError(null);
     if (currentStep < 4) {
       setCurrentStep((prev) => prev + 1);
     }
   };
 
   const handlePrev = () => {
-    if (currentStep > 1) setCurrentStep((prev) => prev - 1);
+    setStepError(null);
+    if (currentStep > 1) {
+      setCurrentStep((prev) => prev - 1);
+    }
   };
 
-  const profileOptions = [
-    {
-      id: 'general',
-      icon: '🧍',
-      title: 'General Commuter',
-      desc: 'Balance estimated AQI, traffic, and duration using general route weights.',
-      badge: 'Balanced Inhalation',
-    },
-    {
-      id: 'asthma',
-      icon: '🫁',
-      title: 'Asthma / Reactive',
-      desc: 'Give estimated AQI more weight when comparing routes.',
-      badge: 'AQI Priority',
-    },
-    {
-      id: 'elderly',
-      icon: 'elderly',
-      title: 'Elderly',
-      desc: 'Favor lower estimated AQI while balancing trip duration.',
-      badge: 'Comfort Priority',
-    },
-    {
-      id: 'child',
-      icon: 'child_care',
-      title: 'Child',
-      desc: 'Give estimated AQI more weight when comparing routes.',
-      badge: 'AQI Priority',
-    },
-  ];
-
-  const steps = [
-    { step: 1, title: 'Destination', subtitle: 'Waypoint & target', icon: 'pin_drop' },
-    { step: 2, title: 'Travel Mode', subtitle: 'Walk vs Cycle', icon: 'directions_walk' },
-    { step: 3, title: 'Health Filters', subtitle: 'Exposure priorities', icon: 'cardiology' },
-    { step: 4, title: 'Route Results', subtitle: 'Review estimates', icon: 'insights' },
-  ];
+  const handleFindRoutesClick = async () => {
+    setStepError(null);
+    if (!origin || !destination) {
+      setCurrentStep(1);
+      setStepError('Please set both origin and destination first.');
+      return;
+    }
+    await onFindRoutes({ navigateToMap: false });
+  };
 
   const activeSelectedRoute =
     routes.find((r) => r.id === previewSelectedId) ||
@@ -105,137 +164,196 @@ export default function RoutePlanning({
     null;
 
   return (
-    <div className="w-full max-w-7xl mx-auto px-margin md:px-margin-tablet lg:px-margin-desktop py-space-xl">
-      {/* Top Action Breadcrumb & Quick Telemetry */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-space-md mb-space-xl">
-        <div className="flex items-center gap-space-sm">
-          <button
-            type="button"
-            onClick={handlePrev}
-            disabled={currentStep === 1}
-            aria-label="Go to previous step"
-            className="w-10 h-10 rounded-xl bg-surface-container flex items-center justify-center text-on-surface hover:bg-surface-container-high transition-colors shadow-sm disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+    <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 md:py-12">
+      {/* Top Breadcrumb & Title */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
+        <div>
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
+            Plan your{' '}
+            <span className="text-[#15803d] underline decoration-[#86efac] decoration-2 underline-offset-4">
+              clean air journey
+            </span>
+          </h1>
+        </div>
+      </div>
+
+      {/* Modern Glassmorphic Stepper Header */}
+      <div className="relative mb-8 rounded-3xl bg-white/75 backdrop-blur-2xl border border-white/90 shadow-[0_12px_36px_rgba(21,128,61,0.06),0_2px_12px_rgba(0,0,0,0.03)] p-4 sm:p-5 ring-1 ring-slate-900/5 overflow-hidden">
+        {/* Ambient emerald gradient edge reflection */}
+        <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-emerald-500/20 via-[#15803d]/40 to-emerald-500/20 pointer-events-none" />
+
+        <div className="flex flex-col gap-3.5 relative z-10">
+          {/* Progress Bar & Status */}
+          <div className="flex items-center justify-between text-xs px-1">
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-[#15803d] animate-pulse" />
+              <span className="font-mono font-extrabold uppercase tracking-widest text-[#15803d]">
+                Step 0{currentStep} / 04: {steps[currentStep - 1].title}
+              </span>
+            </div>
+            <span className="text-slate-600 font-semibold font-mono bg-white/80 px-2.5 py-0.5 rounded-full border border-slate-200/60 shadow-2xs">
+              {Math.round((currentStep / 4) * 100)}% Complete
+            </span>
+          </div>
+
+          <div className="w-full h-2 bg-slate-100/80 backdrop-blur-sm rounded-full overflow-hidden p-0.5 border border-slate-200/50">
+            <div
+              className="h-full bg-gradient-to-r from-[#15803d] to-[#22c55e] transition-all duration-500 ease-out rounded-full shadow-[0_0_8px_rgba(34,197,94,0.4)]"
+              style={{ width: `${(currentStep / 4) * 100}%` }}
+            />
+          </div>
+
+          {/* Stepper Circles */}
+          <div className="relative flex items-center justify-between px-3 sm:px-6 py-2">
+            {/* Background Track Line */}
+            <div className="absolute top-1/2 left-8 right-8 -translate-y-1/2 h-0.5 bg-slate-200/80 -z-0" />
+            {/* Active Track Line */}
+            <div
+              className="absolute top-1/2 left-8 -translate-y-1/2 h-0.5 bg-gradient-to-r from-[#15803d] to-[#22c55e] -z-0 transition-all duration-500 shadow-xs"
+              style={{
+                width: `${((currentStep - 1) / 3) * 100}%`,
+                maxWidth: 'calc(100% - 4rem)',
+              }}
+            />
+
+            {steps.map((s) => {
+              const isCompleted = currentStep > s.step;
+              const isCurrent = currentStep === s.step;
+              return (
+                <button
+                  key={s.step}
+                  type="button"
+                  onClick={() => {
+                    if (s.step < currentStep || currentStep === 4) setCurrentStep(s.step);
+                  }}
+                  className="relative z-10 flex flex-col items-center group cursor-pointer focus-visible:outline-none"
+                  aria-label={`Go to step ${s.step}: ${s.title}`}
+                >
+                  <div
+                    className={`w-9 h-9 sm:w-11 sm:h-11 rounded-full flex items-center justify-center font-bold text-xs sm:text-sm font-mono transition-all duration-300 ${isCompleted
+                      ? 'bg-[#15803d] text-white shadow-[0_0_12px_rgba(21,128,61,0.35)] ring-4 ring-white'
+                      : isCurrent
+                        ? 'bg-gradient-to-br from-[#15803d] to-[#16a34a] text-white ring-4 ring-emerald-200/80 shadow-[0_0_18px_rgba(34,197,94,0.5)] scale-110'
+                        : 'bg-white/90 backdrop-blur-sm text-slate-400 border border-slate-300/80 ring-4 ring-white/60 group-hover:border-slate-400 group-hover:scale-105'
+                      }`}
+                  >
+                    {isCompleted ? (
+                      <span className="material-symbols-outlined text-[18px]">check</span>
+                    ) : (
+                      <span>{s.step}</span>
+                    )}
+                  </div>
+                  <span
+                    className={`text-[11px] font-semibold mt-2 hidden sm:block tracking-tight transition-colors ${isCurrent
+                      ? 'text-[#15803d] font-bold drop-shadow-2xs'
+                      : isCompleted
+                        ? 'text-slate-800 font-medium'
+                        : 'text-slate-400 font-medium'
+                      }`}
+                  >
+                    {s.title}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* Mobile Map Toggle */}
+      <div className="lg:hidden mb-6">
+        <Button
+          variant="secondary"
+          size="md"
+          icon="map"
+          onClick={() => setMobileMapOpen((prev) => !prev)}
+          className="w-full justify-between"
+        >
+          <span>{mobileMapOpen ? 'Hide Interactive Map' : 'View Interactive Map'}</span>
+          <span className="material-symbols-outlined text-[18px]">
+            {mobileMapOpen ? 'expand_less' : 'expand_more'}
+          </span>
+        </Button>
+        {mobileMapOpen && (
+          <div className="mt-3 h-[320px] rounded-2xl overflow-hidden border border-slate-200 shadow-soft">
+            <MapView
+              origin={origin}
+              destination={destination}
+              routes={routes}
+              selectedRouteId={activeSelectedRoute?.id}
+              routeColorOverride="#15803d"
+              onSelectRoute={(id) => setPreviewSelectedId(id)}
+              onPickLocation={(loc) => {
+                if (pickMode === 'origin') {
+                  setOrigin(loc);
+                  setPickMode(null);
+                } else if (pickMode === 'destination') {
+                  setDestination(loc);
+                  setPickMode(null);
+                }
+              }}
+              pickMode={pickMode}
+              onCancelPick={() => setPickMode(null)}
+              className="w-full h-full"
+            />
+          </div>
+        )}
+      </div>
+
+      {/* Main 2-Column Layout */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+        {/* Left Column: Wizard Panel */}
+        <div className="lg:col-span-7 flex flex-col gap-6">
+          <Card
+            variant="glass"
+            p="lg"
+            className="!bg-white/80 !backdrop-blur-2xl !border-white/90 shadow-[0_12px_40px_rgba(0,0,0,0.04),0_2px_12px_rgba(21,128,61,0.05)] rounded-3xl min-h-[520px] flex flex-col justify-between ring-1 ring-slate-900/5"
           >
-            <span className="material-symbols-outlined text-[20px]">arrow_back</span>
-          </button>
-          <div>
-            <div className="flex items-center gap-space-xs text-on-surface-variant font-label-md text-label-md uppercase tracking-wider">
-              <span>Route Optimiser</span>
-              <span>•</span>
-              <span className="text-secondary font-semibold">
-                Step {currentStep}. {steps[currentStep - 1].title}
-              </span>
-            </div>
-            <p
-              className="text-[26px] md:text-[30px] font-bold text-primary tracking-tight leading-snug"
-            >
-              Plan Your <span className="italic font-semibold text-secondary">Healthy Journey</span>
-            </p>
-          </div>
-        </div>
-
-        {/* Estimated-data status */}
-        <div className="flex items-center gap-space-md bg-surface-container-low px-space-md py-2 rounded-2xl shadow-sm border border-[#a7f3d0]/40">
-          <div className="flex items-center gap-space-xs">
-            <span className="w-2 h-2 rounded-full bg-secondary" />
-            <span className="font-data-badge text-data-badge text-on-surface-variant uppercase tracking-wider text-[11px]">
-              Data:
-            </span>
-            <span className="font-data-badge text-data-badge font-semibold text-secondary tabular-nums text-[12px]">
-              Modeled AQI and traffic estimates
-            </span>
-          </div>
-          <div className="h-4 w-px bg-surface-container-highest" />
-          <div className="flex items-center gap-space-xs font-data-badge text-data-badge text-on-surface-variant">
-            <span className="font-semibold text-primary tabular-nums text-[12px]">Not live measurements</span>
-          </div>
-        </div>
-      </div>
-
-      {/* Stepper Navigation Track */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-space-sm mb-space-xl">
-        {steps.map((s) => {
-          const isCurrent = currentStep === s.step;
-          const isDone = currentStep > s.step;
-          return (
-            <button
-              key={s.step}
-              type="button"
-              onClick={() => setCurrentStep(s.step)}
-              className={`text-left p-space-md rounded-2xl transition-all duration-300 cursor-pointer ${
-                isCurrent
-                  ? 'bg-surface-container-lowest shadow-md border-l-4 border-secondary text-primary ring-1 ring-[#a7f3d0]'
-                  : isDone
-                  ? 'bg-surface-container-low/90 text-primary hover:bg-surface-container'
-                  : 'bg-surface-container-low text-on-surface-variant hover:bg-surface-container'
-              }`}
-            >
-              <div className="flex items-center justify-between mb-1">
-                <span
-                  className={`font-data-badge text-[11px] uppercase tracking-widest tabular-nums font-bold ${
-                    isCurrent ? 'text-secondary' : 'text-on-surface-variant/70'
-                  }`}
-                >
-                  Step 0{s.step}
-                </span>
-                <span
-                  className={`material-symbols-outlined text-[18px] ${
-                    isCurrent || isDone ? 'text-secondary' : 'text-on-surface-variant'
-                  }`}
-                >
-                  {isDone ? 'check_circle' : s.icon}
-                </span>
-              </div>
-              <p className="font-label-lg text-label-lg font-bold tracking-tight text-on-surface">
-                {s.title}
-              </p>
-              <p className="text-[12px] font-medium text-on-surface-variant/80 tracking-normal truncate mt-0.5">
-                {s.subtitle}
-              </p>
-            </button>
-          );
-        })}
-      </div>
-
-      {/* Wizard Core Container */}
-      <div
-        className="relative bg-surface-container-lowest rounded-3xl p-space-md md:p-space-xl shadow-xl overflow-hidden min-h-[580px] flex flex-col justify-between"
-        style={{
-          border: '1.5px solid rgb(220, 236, 226)',
-          boxShadow: 'rgba(21, 128, 61, 0.08) 0px 10px 30px -5px',
-        }}
-      >
-        {/* STEP 1: DESTINATION SEARCH */}
-        {currentStep === 1 && (
-          <section className="flex flex-col gap-space-lg">
-            <div className="max-w-2xl">
-              <span className="font-data-badge text-[11px] text-secondary uppercase tracking-[0.2em] font-bold">
-                Spatial Targeting
-              </span>
-              <h2
-                className="text-[36px] md:text-[44px] leading-[1.12] text-primary tracking-tight mt-1"
-              >
-                Where do you <span className="font-semibold italic text-secondary">want to wander?</span>
-              </h2>
-              <p className="font-body-md text-body-md text-on-surface-variant/90 leading-relaxed mt-2">
-                Set your corridor. We compare route geometry with clearly labeled AQI and traffic estimates.
-              </p>
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-space-lg items-start">
-              {/* Inputs Column */}
-              <div className="lg:col-span-7 flex flex-col gap-space-md">
-                <div className="bg-surface-container-low/70 p-space-md rounded-2xl border border-[#dcfce7] flex flex-col gap-space-sm">
+            {/* ======================================================
+                STEP 1: WAYPOINTS (ORIGIN & DESTINATION)
+                ====================================================== */}
+            {currentStep === 1 && (
+              <div className="page-transition flex flex-col gap-6">
+                <div>
                   <div className="flex items-center gap-2 mb-1">
-                    <span className="w-2.5 h-2.5 rounded-full bg-secondary" />
-                    <span className="font-label-md text-label-md font-bold text-[#14532d] uppercase tracking-wider">
-                      Start &amp; Destination
+                    <span className="w-2.5 h-2.5 rounded-full bg-[#15803d]" />
+                    <span className="text-xs font-bold font-mono uppercase tracking-wider text-[#15803d]">
+                      Step 01 · Spatial Coordinates
                     </span>
                   </div>
+                  <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
+                    Where are you heading?
+                  </h2>
+                  <p className="text-sm text-slate-600 mt-1">
+                    Set your origin and target destination. Use search, GPS, or click to pinpoint directly on the map.
+                  </p>
+                </div>
 
+                {pickMode && (
+                  <div className="bg-[#ecfdf5] border border-[#a7f3d0] rounded-xl p-3 flex items-center justify-between text-xs text-[#166534]">
+                    <div className="flex items-center gap-2">
+                      <span className="material-symbols-outlined text-[18px] text-[#15803d]">
+                        touch_app
+                      </span>
+                      <span>
+                        Click anywhere on the map to set{' '}
+                        <strong>{pickMode === 'origin' ? 'start location' : 'destination'}</strong>.
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setPickMode(null)}
+                      className="font-bold underline cursor-pointer hover:text-[#14532d]"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                )}
+
+                <div className="flex flex-col gap-4 bg-slate-50/70 p-4 rounded-2xl border border-slate-200/70">
                   <PlaceInput
-                    label="Current Origin"
-                    placeholder="Search start location or use GPS..."
+                    label="Starting location"
+                    placeholder="Search start address or use GPS..."
                     value={origin}
                     onChange={setOrigin}
                     onPickOnMap={() => setPickMode('origin')}
@@ -243,407 +361,470 @@ export default function RoutePlanning({
                   />
 
                   <PlaceInput
-                    label="Target Destination"
-                    placeholder="Search target destination..."
+                    label="Target destination"
+                    placeholder="Search destination address..."
                     value={destination}
                     onChange={setDestination}
                     onPickOnMap={() => setPickMode('destination')}
                     isPicking={pickMode === 'destination'}
                   />
 
-                  {(error || stepError) && (
-                    <div className="text-error text-body-sm bg-error-container/40 p-2.5 rounded-xl border border-error/20 flex items-center gap-1.5 mt-1">
-                      <span className="material-symbols-outlined text-[16px]">error</span>
-                      <span>{stepError || error}</span>
+                  {stepError && (
+                    <div className="text-red-700 text-xs bg-red-50 p-3 rounded-xl border border-red-200 flex items-center gap-2">
+                      <span className="material-symbols-outlined text-[16px] text-red-600">error</span>
+                      <span>{stepError}</span>
                     </div>
                   )}
                 </div>
 
-                {/* Canopy detection card */}
-                <div className="p-space-md bg-[#ecfdf5] rounded-2xl flex items-start gap-space-sm border border-[#a7f3d0]">
-                  <span className="material-symbols-outlined text-secondary text-[22px] mt-0.5">info</span>
-                  <p className="font-body-sm text-[13px] text-on-surface leading-relaxed">
-                    <span className="font-bold text-secondary tracking-tight">Estimate notice:</span>{' '}
-                    AQI and traffic values are modeled comparisons, not live sensor readings or medical advice.
+                <div className="p-4 bg-[#f0fdf4] rounded-2xl border border-[#bbf7d0] flex items-start gap-3">
+                  <span className="material-symbols-outlined text-[#15803d] text-[20px] mt-0.5">
+                    park
+                  </span>
+                  <p className="text-xs text-slate-700 leading-relaxed">
+                    <strong className="text-[#15803d]">Micro-corridor preview:</strong> We analyze satellite canopy foliage density and CAAQMS particulate data along street geometry between your points.
                   </p>
                 </div>
               </div>
-
-              {/* Mini Map Column */}
-              <div className="lg:col-span-5 flex flex-col gap-space-md">
-                <div className="relative rounded-2xl overflow-hidden shadow-lg border border-[#a7f3d0] h-[320px]">
-                  <MapView
-                    origin={origin}
-                    destination={destination}
-                    onPickLocation={(loc) => {
-                      if (pickMode === 'origin') {
-                        setOrigin(loc);
-                        setPickMode(null);
-                      } else if (pickMode === 'destination') {
-                        setDestination(loc);
-                        setPickMode(null);
-                      }
-                    }}
-                    pickMode={pickMode}
-                    onCancelPick={() => setPickMode(null)}
-                    className="w-full h-full"
-                  />
-                </div>
-
-                {/* Microclimate Cards */}
-                <div className="grid grid-cols-2 gap-space-sm">
-                  <div className="p-space-sm rounded-2xl shadow-sm bg-[#f0fdf4] border border-[#a7f3d0]">
-                    <div className="flex items-center gap-1">
-                      <span className="material-symbols-outlined text-[16px] text-[#15803d]">air</span>
-                      <span className="font-data-badge text-[11px] uppercase tracking-wider font-bold text-[#166534]">
-                        AQI source
-                      </span>
-                    </div>
-                    <p className="font-data-metric text-[18px] font-bold mt-0.5 tabular-nums tracking-tight text-[#052e16]">
-                      Modeled grid
-                    </p>
-                    <p className="font-data-badge text-[11px] font-semibold text-[#15803d]">
-                      Not live sensors
-                    </p>
-                  </div>
-
-                  <div className="p-space-sm rounded-2xl shadow-sm bg-[#ecfdf5] border border-[#a7f3d0]">
-                    <div className="flex items-center gap-1">
-                      <span className="material-symbols-outlined text-[16px] text-[#15803d]">thermostat</span>
-                      <span className="font-data-badge text-[11px] uppercase tracking-wider font-bold text-[#166534]">
-                        Traffic source
-                      </span>
-                    </div>
-                    <p className="font-data-metric text-[18px] font-bold mt-0.5 tabular-nums tracking-tight text-[#052e16]">
-                      Modeled estimate
-                    </p>
-                    <p className="font-data-badge text-[11px] font-semibold text-[#15803d]">
-                      Not live traffic data
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </section>
-        )}
-
-        {/* STEP 2: TRAVEL MODE */}
-        {currentStep === 2 && (
-          <section className="flex flex-col gap-space-lg">
-            <div className="max-w-2xl">
-              <span className="font-data-badge text-data-badge text-secondary uppercase tracking-widest font-semibold">
-                Locomotion Model
-              </span>
-              <h2
-                className="text-[34px] md:text-[40px] leading-[1.15] text-primary tracking-tight mt-1 font-bold"
-              >
-                How are you travelling?
-              </h2>
-              <p className="font-body-md text-body-md text-on-surface-variant mt-1">
-                  Choose walking or cycling route geometry. Your health profile adjusts the experimental route-score weights.
-              </p>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-space-lg max-w-4xl pt-space-sm">
-              {/* Walking Card */}
-              <button
-                type="button"
-                onClick={() => setMode('walking')}
-                className={`text-left cursor-pointer relative rounded-3xl p-space-lg shadow-md transition-all duration-300 transform hover:-translate-y-1 ${
-                  mode === 'walking'
-                    ? 'bg-[#ecfdf5] border-2 border-secondary shadow-lg'
-                    : 'bg-surface-container-low border border-surface-container hover:bg-surface-container'
-                }`}
-              >
-                {mode === 'walking' && (
-                  <div className="absolute top-5 right-5 w-8 h-8 rounded-full bg-secondary flex items-center justify-center text-white shadow-md">
-                    <span className="material-symbols-outlined text-[18px]">check</span>
-                  </div>
-                )}
-                <div className="w-16 h-16 rounded-2xl bg-secondary-container flex items-center justify-center text-on-secondary-container mb-space-md">
-                  <span className="material-symbols-outlined text-[36px]">directions_walk</span>
-                </div>
-                <div className="flex items-center gap-space-xs mb-1">
-                  <h3 className="font-headline-md text-headline-md text-primary font-bold">Walking</h3>
-                  <span className="font-data-badge text-data-badge px-space-xs py-0.5 bg-secondary text-white rounded-full">
-                    Default
-                  </span>
-                </div>
-                <p className="font-body-md text-body-md text-on-surface-variant mb-space-md">
-                  Find pedestrian-friendly routes with cleaner air, tree shade canopies, sidewalks, and quiet low-traffic roads.
-                </p>
-                <div className="space-y-space-xs pt-space-xs border-t border-secondary-fixed/40">
-                  <div className="flex items-center justify-between font-label-md text-label-md">
-                    <span className="text-on-surface-variant">Minute Ventilation:</span>
-                    <span className="font-semibold text-primary">12.5 L/min average</span>
-                  </div>
-                  <div className="flex items-center justify-between font-label-md text-label-md">
-                    <span className="text-on-surface-variant">Corridor Criteria:</span>
-                    <span className="font-semibold text-secondary">Sidewalks • Tree Shade • Low Tailpipe</span>
-                  </div>
-                </div>
-              </button>
-
-              {/* Cycling Card */}
-              <button
-                type="button"
-                onClick={() => setMode('cycling')}
-                className={`text-left cursor-pointer relative rounded-3xl p-space-lg shadow-md transition-all duration-300 transform hover:-translate-y-1 ${
-                  mode === 'cycling'
-                    ? 'bg-[#ecfdf5] border-2 border-secondary shadow-lg'
-                    : 'bg-surface-container-low border border-surface-container hover:bg-surface-container'
-                }`}
-              >
-                {mode === 'cycling' && (
-                  <div className="absolute top-5 right-5 w-8 h-8 rounded-full bg-secondary flex items-center justify-center text-white shadow-md">
-                    <span className="material-symbols-outlined text-[18px]">check</span>
-                  </div>
-                )}
-                <div className="w-16 h-16 rounded-2xl bg-surface-container-highest flex items-center justify-center text-primary mb-space-md">
-                  <span className="material-symbols-outlined text-[36px]">directions_bike</span>
-                </div>
-                <div className="flex items-center gap-space-xs mb-1">
-                  <h3 className="font-headline-md text-headline-md text-primary font-bold">Cycling</h3>
-                  <span className="font-data-badge text-data-badge px-space-xs py-0.5 bg-surface-container text-on-surface-variant rounded-full">
-                    Aerobic Inhalation
-                  </span>
-                </div>
-                <p className="font-body-md text-body-md text-on-surface-variant mb-space-md">
-                  Find cycling routes with lower vehicular soot, gentle gradients (&lt;4%), and reduced intersection idling.
-                </p>
-                <div className="space-y-space-xs pt-space-xs border-t border-surface-container-highest">
-                  <div className="flex items-center justify-between font-label-md text-label-md">
-                    <span className="text-on-surface-variant">Minute Ventilation:</span>
-                    <span className="font-semibold text-primary">38.0 L/min (3x inhalation)</span>
-                  </div>
-                  <div className="flex items-center justify-between font-label-md text-label-md">
-                    <span className="text-on-surface-variant">Corridor Criteria:</span>
-                    <span className="font-semibold text-secondary">Bicycle Lanes • Low Gradient (&lt;4%)</span>
-                  </div>
-                </div>
-              </button>
-            </div>
-
-            <div className="max-w-4xl p-space-md bg-surface-container-low rounded-2xl flex items-center gap-space-md border border-[#a7f3d0]">
-              <span className="material-symbols-outlined text-secondary text-[24px]">vital_signs</span>
-              <div>
-                <p className="font-label-lg text-label-lg font-semibold text-primary">Dynamic Lung Exposure Calculation</p>
-                <p className="font-body-sm text-body-sm text-on-surface-variant">
-                  Because cycling increases breath depth and inhalation volume by up to 250%, our routing engine penalizes high-particulate arterial segments proportionally higher.
-                </p>
-              </div>
-            </div>
-          </section>
-        )}
-
-        {/* STEP 3: HEALTH FILTERS */}
-        {currentStep === 3 && (
-          <section className="flex flex-col gap-space-lg">
-            <div className="max-w-2xl">
-              <span className="font-data-badge text-data-badge text-secondary uppercase tracking-widest font-semibold">
-                Vulnerability Calibration
-              </span>
-              <h2
-                className="text-[34px] md:text-[40px] leading-[1.15] text-primary tracking-tight mt-1 font-bold"
-              >
-                What matters most to you?
-              </h2>
-              <p className="font-body-md text-body-md text-on-surface-variant mt-1">
-                We will use this preference when comparing and scoring routes, matching your personal respiratory profile.
-              </p>
-            </div>
-
-            {(error || stepError) && (
-              <div role="alert" className="max-w-3xl text-error text-body-sm bg-error-container/40 p-3 rounded-xl border border-error/20 flex items-center gap-2">
-                <span className="material-symbols-outlined text-[18px]">error</span>
-                <span>{stepError || error}</span>
-              </div>
             )}
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-space-md pt-space-xs">
-              {profileOptions.map((opt) => {
-                const isSelected = profile === opt.id;
-                return (
-                  <button
-                    key={opt.id}
-                    type="button"
-                    onClick={() => setProfile(opt.id)}
-                    className={`text-left cursor-pointer rounded-2xl p-space-md transition-all flex flex-col justify-between ${
-                      isSelected
-                        ? 'bg-[#ecfdf5] border-2 border-secondary shadow-md'
-                        : 'bg-surface-container-low hover:bg-surface-container border border-surface-container'
-                    }`}
-                  >
-                    <div>
-                      <div className="flex items-center justify-between mb-space-sm">
-                        <span className="text-2xl">{opt.icon}</span>
-                        {isSelected && (
-                          <span className="material-symbols-outlined text-secondary text-[20px]">check_circle</span>
-                        )}
-                      </div>
-                      <h4 className="font-headline-sm text-[18px] text-primary font-bold">{opt.title}</h4>
-                      <p className="font-body-sm text-body-sm text-on-surface-variant mt-space-xs">{opt.desc}</p>
-                    </div>
-                    <div className="mt-space-md pt-space-sm border-t border-surface-container-highest">
-                      <span className="font-data-badge text-data-badge text-on-surface-variant uppercase">
-                        Weighting Tag
-                      </span>
-                      <p className="font-label-lg text-label-lg text-secondary font-semibold">{opt.badge}</p>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          </section>
-        )}
-
-        {/* STEP 4: ROUTE PREVIEW & LAUNCH */}
-        {currentStep === 4 && (
-          <section className="flex flex-col gap-space-lg">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-space-sm">
-              <div>
-                <span className="font-data-badge text-data-badge text-secondary uppercase tracking-widest font-semibold">
-                  Synthesized Routes
-                </span>
-                <h2
-                  className="text-[32px] md:text-[38px] text-primary tracking-tight font-bold"
-                >
-                  Your <span className="italic font-semibold text-secondary">Optimized Corridors</span>
-                </h2>
-              </div>
-
-              {routes.length > 0 && (
-                <div className="flex items-center gap-space-xs">
-                  <button
-                    type="button"
-                    onClick={onProceedToComparison}
-                    className="px-4 py-2 rounded-xl bg-surface-container text-primary font-label-md text-label-md font-semibold hover:bg-surface-container-high transition-all cursor-pointer flex items-center gap-1.5"
-                  >
-                    <span className="material-symbols-outlined text-[16px]">balance</span>
-                    Full Matrix
-                  </button>
-                  <button
-                    type="button"
-                    onClick={onProceedToMap}
-                    className="px-4 py-2 rounded-xl bg-[#14532d] text-white font-label-md text-label-md font-semibold hover:bg-[#166534] transition-all cursor-pointer flex items-center gap-1.5 shadow-md"
-                  >
-                    <span className="material-symbols-outlined text-[16px]">map</span>
-                    Explore on Map
-                  </button>
-                </div>
-              )}
-            </div>
-
-            {loading ? (
-              <div className="h-[380px] rounded-2xl bg-surface-container-low flex flex-col items-center justify-center gap-3">
-                <span className="material-symbols-outlined text-[36px] text-secondary animate-spin">autorenew</span>
-                <p className="font-headline-sm text-primary font-bold">Calculating route options...</p>
-                <p className="font-body-sm text-on-surface-variant">Comparing route length, duration, and estimated environmental scores</p>
-              </div>
-            ) : routes.length > 0 ? (
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-space-lg">
-                {/* Map Preview Left */}
-                <div className="lg:col-span-7 h-[400px] rounded-2xl overflow-hidden shadow-lg border border-[#a7f3d0]">
-                  <MapView
-                    origin={origin}
-                    destination={destination}
-                    routes={routes}
-                    selectedRouteId={activeSelectedRoute?.id}
-                    onSelectRoute={(id) => setPreviewSelectedId(id)}
-                    className="w-full h-full"
-                  />
+            {/* ======================================================
+                STEP 2: TRAVEL MODE
+                ====================================================== */}
+            {currentStep === 2 && (
+              <div className="page-transition flex flex-col gap-6">
+                <div>
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="w-2.5 h-2.5 rounded-full bg-[#15803d]" />
+                    <span className="text-xs font-bold font-mono uppercase tracking-wider text-[#15803d]">
+                      Step 02 · Locomotion Model
+                    </span>
+                  </div>
+                  <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
+                    How will you travel?
+                  </h2>
+                  <p className="text-sm text-slate-600 mt-1">
+                    Speed and physical exertion directly dictate how many litres of air pass through your lungs.
+                  </p>
                 </div>
 
-                {/* Route Cards Right */}
-                <div className="lg:col-span-5 flex flex-col gap-space-sm">
-                  {routes.slice(0, 3).map((r) => {
-                    const isSelected = activeSelectedRoute?.id === r.id;
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {modeOptions.map((opt) => {
+                    const isSelected = mode === opt.id;
                     return (
                       <div
-                        key={r.id}
-                        onClick={() => setPreviewSelectedId(r.id)}
-                        className={`p-space-md rounded-2xl cursor-pointer transition-all ${
-                          isSelected
-                            ? 'bg-[#ecfdf5] border-2 border-secondary shadow-md'
-                            : 'bg-surface-container-low border border-surface-container hover:bg-surface-container'
-                        }`}
+                        key={opt.id}
+                        onClick={() => setMode(opt.id)}
+                        className={`relative rounded-2xl p-5 cursor-pointer transition-all duration-150 flex flex-col justify-between ${isSelected
+                          ? 'bg-[#f0fdf4] border-2 border-[#15803d] ring-2 ring-[#86efac]/50 shadow-soft'
+                          : 'bg-white border border-slate-200 hover:border-slate-300 hover:bg-slate-50/50 shadow-2xs'
+                          }`}
+                        role="radio"
+                        aria-checked={isSelected}
+                        tabIndex={0}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            setMode(opt.id);
+                          }
+                        }}
                       >
-                        <div className="flex items-center justify-between mb-1">
-                          <span className="font-label-md text-label-md font-bold text-primary flex items-center gap-1.5">
-                            <span className="material-symbols-outlined text-[16px] text-secondary">
-                              {r.isRecommended ? 'eco' : r.isFastest ? 'speed' : 'alt_route'}
+                        {isSelected && (
+                          <div className="absolute top-4 right-4 w-6 h-6 rounded-full bg-[#15803d] text-white flex items-center justify-center shadow-2xs">
+                            <span className="material-symbols-outlined text-[16px]">check</span>
+                          </div>
+                        )}
+
+                        <div>
+                          <div className="w-12 h-12 rounded-xl bg-[#ecfdf5] text-[#15803d] flex items-center justify-center mb-4">
+                            <span className="material-symbols-outlined text-[26px]">
+                              {opt.icon}
                             </span>
-                            {r.label}
-                          </span>
-                          <span className="font-data-badge text-data-badge px-2 py-0.5 rounded-full bg-[#dcfce7] text-[#166534] font-bold">
-                            AQI {r.avgAqi}
-                          </span>
+                          </div>
+                          <div className="flex items-center gap-2 mb-1">
+                            <h3 className="text-lg font-bold text-slate-900">{opt.title}</h3>
+                            <span className="text-xs font-mono font-bold text-[#15803d] bg-[#dcfce7] px-2 py-0.5 rounded-full">
+                              {opt.speed}
+                            </span>
+                          </div>
+                          <p className="text-xs text-slate-600 leading-relaxed mb-4">
+                            {opt.description}
+                          </p>
                         </div>
-                        <div className="flex items-center justify-between text-body-sm text-on-surface-variant font-data-metric text-[14px]">
-                          <span>{r.distanceKm} km • {r.durationMinutes} min</span>
-                          <span className="text-[#15803d] font-semibold">{r.healthScore || 85}/100 Health Score</span>
+
+                        <div className="pt-3 border-t border-slate-200/60 text-[11px] text-slate-500 flex flex-col gap-1 font-mono">
+                          <div>
+                            Ventilation: <strong className="text-slate-800">{opt.ventilation}</strong>
+                          </div>
+                          <div className="text-[#15803d] font-semibold">{opt.criteria}</div>
                         </div>
                       </div>
                     );
                   })}
-
-                  <button
-                    type="button"
-                    onClick={() => onStartNavigation(activeSelectedRoute?.id)}
-                    className="mt-2 w-full h-12 rounded-xl bg-gradient-to-b from-[#15803d] to-[#14532d] text-white font-label-lg text-label-lg font-bold flex items-center justify-center gap-space-xs shadow-md hover:brightness-105 active:scale-[0.98] transition-all cursor-pointer"
-                  >
-                    <span>Start Live Navigation</span>
-                    <span className="material-symbols-outlined text-[18px]">navigation</span>
-                  </button>
                 </div>
-              </div>
-            ) : (
-              <div className="h-[300px] rounded-2xl bg-surface-container-low flex flex-col items-center justify-center gap-3">
-                <span className="material-symbols-outlined text-[36px] text-on-surface-variant">route</span>
-                <p className="font-headline-sm text-primary font-bold">Ready to synthesize routes</p>
-                <button
-                  type="button"
-                  onClick={onFindRoutes}
-                  className="px-6 py-2.5 rounded-xl bg-[#14532d] text-white font-label-md text-label-md font-semibold shadow-md hover:bg-[#166534] transition-all cursor-pointer"
-                >
-                  Generate Corridors Now
-                </button>
+
+
               </div>
             )}
-          </section>
-        )}
 
-        {/* Wizard Bottom Controls */}
-        <div className="flex items-center justify-between pt-space-xl border-t border-[#a7f3d0]/40 mt-space-lg">
-          <button
-            type="button"
-            onClick={handlePrev}
-            disabled={currentStep === 1}
-            className="px-space-lg py-2.5 rounded-xl border border-outline-variant/40 text-on-surface font-label-lg text-label-lg hover:bg-surface-container transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            Previous
-          </button>
+            {/* ======================================================
+                STEP 3: HEALTH PROFILE
+                ====================================================== */}
+            {currentStep === 3 && (
+              <div className="page-transition flex flex-col gap-6">
+                <div>
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="w-2.5 h-2.5 rounded-full bg-[#15803d]" />
+                    <span className="text-xs font-bold font-mono uppercase tracking-wider text-[#15803d]">
+                      Step 03 · Vulnerability Calibration
+                    </span>
+                  </div>
+                  <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
+                    Select your health profile
+                  </h2>
+                  <p className="text-sm text-slate-600 mt-1">
+                    Different lungs have different tolerances. We adjust particulate weights and slope thresholds accordingly.
+                  </p>
+                </div>
 
-          {currentStep < 4 ? (
-            <button
-              type="button"
-              onClick={handleNext}
-              disabled={currentStep === 3 && loading}
-              className="px-space-xl py-2.5 rounded-xl bg-[#14532d] hover:bg-[#166534] text-white font-label-lg text-label-lg font-semibold shadow-md active:scale-[0.98] transition-all cursor-pointer flex items-center gap-space-xs"
-            >
-              <span>{currentStep === 3 ? (loading ? 'Scoring routes…' : 'Score Routes') : 'Continue'}</span>
-              <span className="material-symbols-outlined text-[18px]">{loading && currentStep === 3 ? 'progress_activity' : 'arrow_forward'}</span>
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={onProceedToMap}
-              className="px-space-xl py-2.5 rounded-xl bg-[#14532d] hover:bg-[#166534] text-white font-label-lg text-label-lg font-semibold shadow-md active:scale-[0.98] transition-all cursor-pointer flex items-center gap-space-xs"
-            >
-              <span>Open in Main Map</span>
-              <span className="material-symbols-outlined text-[18px]">map</span>
-            </button>
-          )}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {profileOptions.map((opt) => {
+                    const isSelected = profile === opt.id;
+                    return (
+                      <div
+                        key={opt.id}
+                        onClick={() => setProfile(opt.id)}
+                        className={`relative rounded-2xl p-5 cursor-pointer transition-all duration-150 flex flex-col justify-between ${isSelected
+                          ? 'bg-[#f0fdf4] border-2 border-[#15803d] ring-2 ring-[#86efac]/50 shadow-soft'
+                          : 'bg-white border border-slate-200 hover:border-slate-300 hover:bg-slate-50/50 shadow-2xs'
+                          }`}
+                        role="radio"
+                        aria-checked={isSelected}
+                        tabIndex={0}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            setProfile(opt.id);
+                          }
+                        }}
+                      >
+                        {isSelected && (
+                          <div className="absolute top-4 right-4 w-6 h-6 rounded-full bg-[#15803d] text-white flex items-center justify-center shadow-2xs">
+                            <span className="material-symbols-outlined text-[16px]">check</span>
+                          </div>
+                        )}
+
+                        <div>
+                          <div className="w-10 h-10 rounded-xl bg-[#ecfdf5] text-[#15803d] flex items-center justify-center mb-3">
+                            <span className="material-symbols-outlined text-[22px]">
+                              {opt.icon}
+                            </span>
+                          </div>
+                          <h3 className="text-base font-bold text-slate-900 mb-0.5">
+                            {opt.title}
+                          </h3>
+                          <span className="inline-block text-[10px] font-mono font-bold text-[#15803d] uppercase tracking-wider mb-2">
+                            {opt.tag}
+                          </span>
+                          <p className="text-xs text-slate-600 leading-relaxed">
+                            {opt.description}
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* ======================================================
+                STEP 4: REVIEW & SYNTHESIZE
+                ====================================================== */}
+            {currentStep === 4 && (
+              <div className="page-transition flex flex-col gap-6">
+                <div>
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="w-2.5 h-2.5 rounded-full bg-[#15803d]" />
+                    <span className="text-xs font-bold font-mono uppercase tracking-wider text-[#15803d]">
+                      Step 04 · Review &amp; Synthesize
+                    </span>
+                  </div>
+                  <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
+                    Review your clean route
+                  </h2>
+                  <p className="text-sm text-slate-600 mt-1">
+                    Double-check your parameters, then compute the highest botanical canopy corridor.
+                  </p>
+                </div>
+
+                {/* Summary Card with Edit links */}
+                <Card variant="default" p="md" className="border-slate-200 bg-slate-50/60 shadow-2xs">
+                  <div className="divide-y divide-slate-200/80 text-xs">
+                    {/* Origin */}
+                    <div className="py-2.5 flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-2.5 overflow-hidden">
+                        <span className="material-symbols-outlined text-[#15803d] text-[18px]">
+                          trip_origin
+                        </span>
+                        <div>
+                          <span className="text-slate-500 block text-[10px] uppercase font-mono">
+                            Start Location
+                          </span>
+                          <span className="font-semibold text-slate-900 truncate block">
+                            {origin?.label || 'Not selected'}
+                          </span>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setCurrentStep(1)}
+                        className="text-[#15803d] hover:underline font-bold text-xs cursor-pointer flex-shrink-0"
+                      >
+                        Edit
+                      </button>
+                    </div>
+
+                    {/* Destination */}
+                    <div className="py-2.5 flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-2.5 overflow-hidden">
+                        <span className="material-symbols-outlined text-[#15803d] text-[18px]">
+                          location_on
+                        </span>
+                        <div>
+                          <span className="text-slate-500 block text-[10px] uppercase font-mono">
+                            Destination
+                          </span>
+                          <span className="font-semibold text-slate-900 truncate block">
+                            {destination?.label || 'Not selected'}
+                          </span>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setCurrentStep(1)}
+                        className="text-[#15803d] hover:underline font-bold text-xs cursor-pointer flex-shrink-0"
+                      >
+                        Edit
+                      </button>
+                    </div>
+
+                    {/* Mode */}
+                    <div className="py-2.5 flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-2.5">
+                        <span className="material-symbols-outlined text-[#15803d] text-[18px]">
+                          {mode === 'cycling' ? 'pedal_bike' : 'directions_walk'}
+                        </span>
+                        <div>
+                          <span className="text-slate-500 block text-[10px] uppercase font-mono">
+                            Mode
+                          </span>
+                          <span className="font-semibold text-slate-900 capitalize">
+                            {mode} ({mode === 'cycling' ? '~18 km/h' : '~4.5 km/h'})
+                          </span>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setCurrentStep(2)}
+                        className="text-[#15803d] hover:underline font-bold text-xs cursor-pointer flex-shrink-0"
+                      >
+                        Edit
+                      </button>
+                    </div>
+
+                    {/* Health Profile */}
+                    <div className="py-2.5 flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-2.5">
+                        <span className="material-symbols-outlined text-[#15803d] text-[18px]">
+                          health_and_safety
+                        </span>
+                        <div>
+                          <span className="text-slate-500 block text-[10px] uppercase font-mono">
+                            Health Sensitivity
+                          </span>
+                          <span className="font-semibold text-slate-900">
+                            {profileLabels[profile] || profile}
+                          </span>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setCurrentStep(3)}
+                        className="text-[#15803d] hover:underline font-bold text-xs cursor-pointer flex-shrink-0"
+                      >
+                        Edit
+                      </button>
+                    </div>
+                  </div>
+                </Card>
+
+                {/* API Error State */}
+                {error && (
+                  <ErrorState
+                    title="Route Calculation Failed"
+                    message={error}
+                    onRetry={handleFindRoutesClick}
+                    retryText="Try finding routes again"
+                  />
+                )}
+
+                {/* Synthesized Routes List (if already computed) */}
+                {routes.length > 0 && (
+                  <div className="flex flex-col gap-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold uppercase tracking-wider text-slate-700">
+                        {routes.length} Corridors Synthesized
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={onProceedToComparison}
+                          className="text-xs text-[#15803d] font-bold hover:underline cursor-pointer flex items-center gap-1"
+                        >
+                          <span className="material-symbols-outlined text-[15px]">balance</span>
+                          Comparison Matrix
+                        </button>
+                        <span className="text-slate-300">·</span>
+                        <button
+                          type="button"
+                          onClick={onProceedToMap}
+                          className="text-xs text-[#15803d] font-bold hover:underline cursor-pointer flex items-center gap-1"
+                        >
+                          <span className="material-symbols-outlined text-[15px]">map</span>
+                          Full Map
+                        </button>
+                      </div>
+                    </div>
+
+                    {routes.slice(0, 3).map((r) => {
+                      const isSelected = activeSelectedRoute?.id === r.id;
+                      return (
+                        <Card
+                          key={r.id}
+                          variant={isSelected ? 'highlight' : 'default'}
+                          p="sm"
+                          interactive
+                          onClick={() => setPreviewSelectedId(r.id)}
+                          className="border-slate-200"
+                        >
+                          <div className="flex items-center justify-between gap-3">
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span className="font-bold text-sm text-slate-900">{r.label}</span>
+                                {r.isRecommended && (
+                                  <Badge variant="mint" size="sm">
+                                    Recommended
+                                  </Badge>
+                                )}
+                              </div>
+                              <div className="text-xs text-slate-500 font-mono mt-0.5">
+                                {r.distanceKm} km · {r.durationMinutes} min · {r.healthScore || 85}/100 Health Score
+                              </div>
+                            </div>
+                            <AqiBadge aqi={r.avgAqi} size="sm" />
+                          </div>
+                        </Card>
+                      );
+                    })}
+
+                    <Button
+                      variant="primary"
+                      size="lg"
+                      icon="navigation"
+                      iconPosition="right"
+                      onClick={() => onStartNavigation(activeSelectedRoute?.id)}
+                      className="w-full text-base font-bold shadow-md mt-2"
+                    >
+                      Start Live Navigation
+                    </Button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Bottom Wizard Navigation (Fixed & Consistent Position) */}
+            <div className="flex items-center justify-between pt-6 border-t border-slate-200/80 mt-8">
+              <Button
+                variant="ghost"
+                size="md"
+                icon="arrow_back"
+                disabled={currentStep === 1}
+                onClick={handlePrev}
+              >
+                Previous
+              </Button>
+
+              {currentStep < 4 ? (
+                <Button
+                  variant="primary"
+                  size="md"
+                  icon="arrow_forward"
+                  iconPosition="right"
+                  onClick={handleNext}
+                >
+                  Continue
+                </Button>
+              ) : (
+                <Button
+                  variant="primary"
+                  size="md"
+                  icon="alt_route"
+                  iconPosition="right"
+                  loading={loading}
+                  onClick={handleFindRoutesClick}
+                >
+                  {routes.length > 0 ? 'Recalculate Corridors' : 'Find cleanest route'}
+                </Button>
+              )}
+            </div>
+          </Card>
+        </div>
+
+        {/* Right Column: Sticky Desktop MapView */}
+        <div className="hidden lg:block lg:col-span-5 sticky top-24">
+          <Card variant="default" p="none" className="overflow-hidden border-slate-200 shadow-lift">
+            <div className="p-4 bg-slate-50/80 border-b border-slate-200 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-[#15803d]" />
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-800">
+                  Live Corridor Geometry
+                </span>
+              </div>
+              {activeSelectedRoute && (
+                <AqiBadge aqi={activeSelectedRoute.avgAqi} size="sm" />
+              )}
+            </div>
+
+            <div className="h-[520px] w-full relative">
+              <MapView
+                origin={origin}
+                destination={destination}
+                routes={routes}
+                selectedRouteId={activeSelectedRoute?.id}
+                routeColorOverride="#15803d"
+                onSelectRoute={(id) => setPreviewSelectedId(id)}
+                onPickLocation={(loc) => {
+                  if (pickMode === 'origin') {
+                    setOrigin(loc);
+                    setPickMode(null);
+                  } else if (pickMode === 'destination') {
+                    setDestination(loc);
+                    setPickMode(null);
+                  }
+                }}
+                pickMode={pickMode}
+                onCancelPick={() => setPickMode(null)}
+                className="w-full h-full"
+              />
+            </div>
+
+            <div className="p-3 bg-white text-[11px] text-slate-500 border-t border-slate-100 flex items-center justify-between font-mono">
+              <span>MapLibre GL Telemetry</span>
+              <span className="text-[#15803d] font-semibold">
+                {origin && destination ? 'Waypoints Placed' : 'Awaiting Waypoints'}
+              </span>
+            </div>
+          </Card>
         </div>
       </div>
     </div>
