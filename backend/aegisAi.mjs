@@ -141,6 +141,8 @@ function parseAegisAiResponse(aiText, routes) {
       'Elevated particulate matter detected in urban segments.',
     ],
     source: 'gemini-ai',
+    aiProvider: 'Google Gemini',
+    isLiveGemini: true,
   };
 }
 
@@ -185,5 +187,7 @@ ${routes.map(r => `| **${r.label}** | ${r.durationMin} mins | ${Math.round(r.avg
       profile === 'asthma' ? 'High sensitivity advisory: keep exertion low' : 'Standard urban particulate advisory',
     ],
     source: 'rule-engine-fallback',
+    aiProvider: 'Deterministic Rule Engine (Fallback)',
+    isLiveGemini: false,
   };
 }
