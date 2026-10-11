@@ -59,7 +59,7 @@ ${JSON.stringify(routesSummary, null, 2)}
   if (apiKey && apiKey.trim() !== '') {
     try {
       console.log('Consulting live Google Gemini AI with Aegis Route prompt...');
-      const model = (process.env.GEMINI_MODEL || 'gemini-1.5-flash').trim();
+      const model = (process.env.GEMINI_MODEL || 'gemini-2.5-flash').trim();
       let url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey.trim()}`;
 
       let response = await fetch(url, {
@@ -83,8 +83,8 @@ ${JSON.stringify(routesSummary, null, 2)}
       });
 
       // Fallback model if the specified model is not found
-      if (response.status === 404 && model !== 'gemini-2.0-flash') {
-        const fallbackUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey.trim()}`;
+      if (response.status === 404 && model !== 'gemini-flash-latest') {
+        const fallbackUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${apiKey.trim()}`;
         response = await fetch(fallbackUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
