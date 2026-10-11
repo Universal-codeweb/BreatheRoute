@@ -34,10 +34,111 @@ function parseBounds(value) {
   return { west, south, east, north };
 }
 
+const DELHI_BOUNDS = {
+  west: 77.19,
+  south: 28.60,
+  east: 77.24,
+  north: 28.65,
+};
+const DELHI_CENTER = [77.215, 28.625];
+const EXISTING_AQI_API_URL = process.env.EXISTING_AQI_API_URL || 'https://cyprd9viih.execute-api.us-east-1.amazonaws.com/aqi';
+
+let delhiGridCache = {
+  cells: null,
+  lastFetched: 0,
+  ttlMs: 5 * 60 * 1000,
+};
+
+async function getDelhiAqiGrid() {
+  const now = Date.now();
+  if (delhiGridCache.cells && now - delhiGridCache.lastFetched < delhiGridCache.ttlMs) {
+    return delhiGridCache.cells;
+  }
+
+  try {
+    const res = await fetch(EXISTING_AQI_API_URL, {
+      signal: AbortSignal.timeout(6000),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data.cells) && data.cells.length > 0) {
+        const halfSize = (data.cellSize || 0.002) / 2;
+        const normalized = data.cells.map((c, i) => {
+          const lat = Number(c.lat);
+          const lng = Number(c.lng);
+          const aqi = Number(c.aqi || 0);
+          const traffic = Number(c.traffic || 0);
+          const roadType = c.roadType || 'other';
+          const level = c.level || levelForAqi(aqi);
+          return {
+            id: c.cellId || `delhi-${i}`,
+            lat,
+            lng,
+            aqi,
+            traffic,
+            roadType,
+            level,
+            bounds: [lng - halfSize, lat - halfSize, lng + halfSize, lat + halfSize],
+            source: 'dynamodb',
+          };
+        });
+        delhiGridCache.cells = normalized;
+        delhiGridCache.lastFetched = now;
+        return normalized;
+      }
+    }
+  } catch (err) {
+    console.warn('Could not fetch existing Delhi AQI grid from upstream API:', err.message);
+  }
+
+  return delhiGridCache.cells || null;
+}
+
+function findNearestDelhiCell(cells, lng, lat) {
+  if (!cells || cells.length === 0) return null;
+  let nearest = null;
+  let minDistanceSq = Infinity;
+  for (const cell of cells) {
+    const dSq = (cell.lng - lng) ** 2 + (cell.lat - lat) ** 2;
+    if (dSq < minDistanceSq) {
+      minDistanceSq = dSq;
+      nearest = cell;
+    }
+  }
+  return nearest;
+}
+
+function isPointInDelhi(lng, lat) {
+  return lng >= DELHI_BOUNDS.west && lng <= DELHI_BOUNDS.east &&
+         lat >= DELHI_BOUNDS.south && lat <= DELHI_BOUNDS.north;
+}
+
+function boundsOverlapDelhi(bounds) {
+  if (!bounds) return false;
+  return bounds.west <= DELHI_BOUNDS.east && bounds.east >= DELHI_BOUNDS.west &&
+         bounds.south <= DELHI_BOUNDS.north && bounds.north >= DELHI_BOUNDS.south;
+}
+
+
 function jsonResponse(response, status, body) {
+  const reqOrigin = response.reqOrigin;
+  const configuredOrigin = process.env.CORS_ORIGIN || '*';
+  let allowOrigin = configuredOrigin;
+
+  if (configuredOrigin === '*') {
+    allowOrigin = '*';
+  } else {
+    const allowed = configuredOrigin.split(',').map((item) => item.trim());
+    if (reqOrigin && (allowed.includes(reqOrigin) || /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(reqOrigin))) {
+      allowOrigin = reqOrigin;
+    } else {
+      allowOrigin = allowed[0] || '*';
+    }
+  }
+
   response.writeHead(status, {
-    'Access-Control-Allow-Origin': process.env.CORS_ORIGIN || '*',
-    'Access-Control-Allow-Headers': 'Content-Type',
+    'Access-Control-Allow-Origin': allowOrigin,
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With',
     'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
     'Content-Type': 'application/json; charset=utf-8',
   });
@@ -144,13 +245,38 @@ function createAqiCells(customBounds) {
   return cells;
 }
 
-function sampleRoute(coords) {
+async function sampleRoute(coords) {
+  const delhiCells = await getDelhiAqiGrid();
   const stride = Math.max(1, Math.floor(coords.length / 40));
   const samples = coords.filter((_, index) => index % stride === 0 || index === coords.length - 1);
-  const conditions = samples.map(([lng, lat]) => estimateEnvironment(lng, lat));
+  let usesDelhiCount = 0;
+
+  const conditions = samples.map(([lng, lat]) => {
+    if (delhiCells && isPointInDelhi(lng, lat)) {
+      const nearest = findNearestDelhiCell(delhiCells, lng, lat);
+      if (nearest) {
+        usesDelhiCount += 1;
+        return {
+          aqi: nearest.aqi,
+          traffic: nearest.traffic,
+          level: nearest.level,
+          isDelhiGrid: true,
+        };
+      }
+    }
+    return {
+      ...estimateEnvironment(lng, lat),
+      isDelhiGrid: false,
+    };
+  });
+
+  const isDelhi = usesDelhiCount > 0;
   return {
     avgAqi: conditions.reduce((total, item) => total + item.aqi, 0) / conditions.length,
     avgTraffic: conditions.reduce((total, item) => total + item.traffic, 0) / conditions.length,
+    aqiSource: isDelhi ? 'DynamoDB Delhi Grid (hourly scheduled model)' : 'deterministic demo estimate',
+    aqiSourceType: isDelhi ? 'cached' : 'simulated',
+    isLive: false,
   };
 }
 
@@ -229,8 +355,8 @@ async function getRoutes(body) {
 
   if (uniqueTrips.length === 0) throw new Error('No walk or cycle route was found for these locations.');
 
-  const routes = uniqueTrips.slice(0, 3).map(({ trip, coords }, index) => {
-    const environment = sampleRoute(coords);
+  const routes = await Promise.all(uniqueTrips.slice(0, 3).map(async ({ trip, coords }, index) => {
+    const environment = await sampleRoute(coords);
     const distanceKm = Number(trip.summary.length.toFixed(2));
     const durationMin = Number((trip.summary.time / 60).toFixed(1));
     const level = levelForAqi(environment.avgAqi);
@@ -241,6 +367,8 @@ async function getRoutes(body) {
       durationMin,
       avgAqi: environment.avgAqi,
       avgTraffic: environment.avgTraffic,
+      aqiSource: environment.aqiSource,
+      aqiSourceType: environment.aqiSourceType,
       coords,
       segments: [{ coords, level, aqi: Number(environment.avgAqi.toFixed(1)) }],
       steps: trip.legs.flatMap((leg) => (leg.maneuvers || []).map((maneuver) => ({
@@ -249,7 +377,7 @@ async function getRoutes(body) {
         durationMin: Number(((maneuver.time || 0) / 60).toFixed(1)),
       }))),
     };
-  });
+  }));
 
   const scoredRoutes = scoreRoutes(routes, profile);
   const recommended = scoredRoutes.reduce((best, route) => route.score > best.score ? route : best);
@@ -322,6 +450,7 @@ async function searchPlaces(url) {
 }
 
 const server = createServer(async (request, response) => {
+  response.reqOrigin = request.headers.origin;
   const url = new URL(request.url, `http://${request.headers.host || 'localhost'}`);
   if (request.method === 'OPTIONS') return jsonResponse(response, 204, {});
 
@@ -335,6 +464,7 @@ const server = createServer(async (request, response) => {
       let customBounds = null;
       const boundsParam = url.searchParams.get('bounds');
       const centerParam = url.searchParams.get('center');
+      const regionParam = url.searchParams.get('region');
       if (boundsParam) {
         customBounds = parseBounds(boundsParam);
       } else if (centerParam) {
@@ -348,11 +478,33 @@ const server = createServer(async (request, response) => {
           };
         }
       }
+
+      // Check if requested bounds overlap the existing Delhi AQI grid or region=delhi
+      const isDelhiRequested = regionParam === 'delhi' ||
+        boundsOverlapDelhi(customBounds) ||
+        (customBounds === null && MAP_CENTER[0] > 75 && MAP_CENTER[0] < 79 && MAP_CENTER[1] > 26 && MAP_CENTER[1] < 30);
+
+      if (isDelhiRequested) {
+        const delhiCells = await getDelhiAqiGrid();
+        if (delhiCells && delhiCells.length > 0) {
+          return jsonResponse(response, 200, {
+            cells: delhiCells,
+            averageAqi: Math.round(delhiCells.reduce((sum, cell) => sum + cell.aqi, 0) / delhiCells.length),
+            source: 'DynamoDB breatheroute-aqi (Delhi grid)',
+            sourceType: 'cached',
+            isLive: false,
+            area: 'Delhi',
+            itemCount: delhiCells.length,
+          });
+        }
+      }
+
       const cells = createAqiCells(customBounds);
       return jsonResponse(response, 200, {
         cells,
         averageAqi: Math.round(cells.reduce((sum, cell) => sum + cell.aqi, 0) / cells.length),
         source: 'deterministic demo estimate',
+        sourceType: 'simulated',
         isLive: false,
       });
     }
