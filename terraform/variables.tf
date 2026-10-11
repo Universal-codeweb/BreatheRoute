@@ -34,9 +34,3 @@ variable "git_branch" {
   default     = "main"
 }
 
-variable "gemini_api_key" {
-  type        = string
-  description = "Optional Google Gemini API Key for server-side Aegis AI route analysis. When set, securely stored in SSM Parameter Store. When empty, intelligent deterministic rule-based AI engine is used."
-  default     = ""
-  sensitive   = true
-}

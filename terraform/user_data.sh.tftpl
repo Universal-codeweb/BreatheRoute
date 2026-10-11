@@ -13,7 +13,8 @@ fi
 # 2. Update packages and install prerequisites
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -y
-apt-get install -y curl git nginx ca-certificates gnupg awscli
+apt-get install -y curl git nginx ca-certificates gnupg
+snap install aws-cli --classic || true
 
 # 3. Install Node.js 22 LTS via NodeSource
 if ! command -v node >/dev/null 2>&1; then
@@ -99,7 +100,7 @@ if [ -n "$$GEMINI_KEY" ] && [ "$$GEMINI_KEY" != "None" ]; then
 PORT=3001
 CORS_ORIGIN=*
 GEMINI_API_KEY=$$GEMINI_KEY
-GEMINI_MODEL=gemini-1.5-flash
+GEMINI_MODEL=gemini-3.5-flash
 EXISTING_AQI_API_URL=https://cyprd9viih.execute-api.us-east-1.amazonaws.com/aqi
 ENV_EOF
   chmod 600 "$${APP_DIR}/backend/.env"
@@ -115,7 +116,7 @@ After=network.target
 Type=simple
 User=ubuntu
 WorkingDirectory=/opt/breatheroute/backend
-ExecStart=/usr/bin/node server.mjs
+ExecStart=/usr/bin/node --env-file-if-exists=.env server.mjs
 Restart=always
 RestartSec=5
 Environment=NODE_ENV=production

@@ -17,4 +17,6 @@ override.tf.json
 .terraformrc
 terraform.rc
 terraform.tfvars
-terraform.tfvars.json
+terraform.tfvars.json
+*tfplan*
+

@@ -123,19 +123,6 @@ resource "aws_iam_role_policy_attachment" "breatheroute_app_policy" {
   policy_arn = aws_iam_policy.breatheroute_app_policy.arn
 }
 
-resource "aws_ssm_parameter" "gemini_api_key" {
-  count       = var.gemini_api_key != "" ? 1 : 0
-  name        = "/breatheroute/gemini_api_key"
-  description = "Google Gemini API key for BreatheRoute Aegis AI"
-  type        = "SecureString"
-  value       = var.gemini_api_key
-
-  tags = {
-    Name        = "breatheroute-gemini-key"
-    Project     = "BreatheRoute"
-    Environment = "demo"
-  }
-}
 
 # ------------------------------------------------------------------
 # Security Group
