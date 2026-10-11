@@ -1,10 +1,11 @@
 # BreatheRoute
 
+> **Atmospheric Precision Clean Navigation**  
 > **AWS Environmental Hacks — Air Track**  
-> **Hackathon Dates:** October 8, 2026 – October 10, 2026  
-> **AWS Region:** `us-east-1`
+> **AWS Region:** `us-east-1`  
+> **Live Demo:** [http://100.55.15.141](http://100.55.15.141)
 
-BreatheRoute finds the **healthiest walking and cycling routes**—not just the fastest—by dynamically scoring paths based on Air Quality Index (AQI), traffic congestion, and travel time. Route recommendations are weighted according to specific health profiles (**General**, **Asthma**, **Elderly**, and **Child**).
+BreatheRoute finds the **healthiest walking and cycling routes**—not just the fastest—by dynamically scoring paths based on Air Quality Index (AQI), traffic congestion, and travel time. Route recommendations are weighted according to specific health profiles (**General**, **Asthma**, **Elderly**, and **Child**), paired with real-time vector cartography and Google Gemini generative AI health recommendations.
 
 ---
 
@@ -18,41 +19,42 @@ BreatheRoute calculates and suggests clean-air alternatives by evaluating multip
 $$\text{Score} = (w_{\text{aqi}} \cdot \text{AQI}) + (w_{\text{traffic}} \cdot \text{Traffic}) + (w_{\text{time}} \cdot \text{Time})$$
 
 - **Personalized Health Profiles**: Tailored weights prioritize lowest pollution exposure for vulnerable groups while balancing travel duration.
-- **Microclimate & Traffic Layer**: Combines city-level monitoring with localized street-level dispersion models.
-- **AI-Powered Route Insights**: Integrates Amazon Bedrock to provide human-readable explanations of why a route was chosen and actionable health guidance.
+- **Dynamic Delhi AQI Grid Integration**: Connects to the AWS DynamoDB Delhi grid (`breatheroute-aqi`) covering 625 geographic cells, truthfully tagged as cached monitored data.
+- **Aegis Route AI Engine**: Leverages Google Gemini (`gemini-3.5-flash` / `gemini-3.5-flash-lite`) to generate authoritative, physician-grade health warnings, route comparisons, and respiratory guidance based on real-time exposure.
+- **Interactive MapLibre GL Vector Engine**: GPU-accelerated client-side rendering with OpenFreeMap Liberty style, interactive AQI heatmap mesh, and turn-by-turn routing telemetry.
 
 ---
 
 ## 3. Architecture
 
-The diagram below shows the optional AWS deployment design. The runnable local app uses OpenFreeMap for map tiles, Photon for place search, and Valhalla for walk/cycle routing, with no mapping API key required.
+BreatheRoute deploys a production-grade full-stack architecture on AWS EC2 orchestrated via Terraform, seamlessly integrated with existing serverless AWS infrastructure.
 
 ```text
                                   +-----------------------+
                                   |  Amazon EventBridge   |
-                                  |   (Hourly Trigger)    |
+                                  |   (Hourly Refresh)    |
                                   +-----------+-----------+
                                               |
                                               v
-+-------------+      +--------------+      +-------------------+      +-------------------------+
-|   Browser   | ---> | AWS Amplify  | ---> | Amazon API Gateway| ---> | AWS Lambda Functions    |
-|  (User UI)  |      | (React App)  |      |    (REST API)     |      | - getRoutes             |
-+-------------+      +--------------+      +-------------------+      | - getAqiGrid            |
-                                                                      | - explainRoute          |
-                                                                      | - setAqi / refreshAqi   |
-                                                                      +------------+------------+
-                                                                                   |
-                                                              +--------------------+--------------------+
-                                                              |                    |                    |
-                                                              v                    v                    v
-                                                     +-----------------+  +-----------------+  +-----------------+
-                                                     | Amazon DynamoDB |  | Amazon Location |  | Amazon Bedrock  |
-                                                     |  (AQI/Traffic)  |  | (Maps & Routing)|  |  (GenAI Insights)|
-                                                     +-----------------+  +-----------------+  +-----------------+
-
-                                     [ AWS IAM: Role & Policy Management ]
-                                    [ Amazon CloudWatch: Logs & Monitoring ]
++------------------+             +--------------------------+             +----------------------+
+|     Browser      |  HTTP :80   |     AWS EC2 Instance     |  DynamoDB   | Amazon DynamoDB      |
+|    (React SPA)   | ----------> |  - Nginx Reverse Proxy   | <---------> |   (breatheroute-aqi) |
++------------------+             |  - Node.js (systemd)     |    Sync     |   625 Delhi Cells    |
+                                 +-------------+------------+             +----------------------+
+                                               |
+                                               v
+                                 +--------------------------+             +----------------------+
+                                 |  AWS Systems Manager     |             |    Google Gemini     |
+                                 |  (SSM Parameter Store)   |             |   Generative AI      |
+                                 |  /breatheroute/gemini_*  |             | (gemini-3.5-flash)   |
+                                 +--------------------------+             +----------------------+
 ```
+
+### Infrastructure Workflow
+1. **Frontend & Ingress**: Nginx serves the production React + Vite SPA, enforces `.mjs` JavaScript module worker MIME handling for MapLibre GL, and proxies `/api` endpoints directly to the local backend.
+2. **Backend Engine**: A persistent Node.js service (`server.mjs`) managed by systemd on port 3001 delivers Valhalla routing, spatial AQI interpolation, and AI analysis.
+3. **Delhi AQI Spatial Telemetry**: Reads from the existing API Gateway and DynamoDB table `breatheroute-aqi` (625 monitored cells).
+4. **Zero-Secret Key Retrieval**: Gemini credentials are stored as `SecureString` in AWS Systems Manager Parameter Store and retrieved at runtime via IAM instance profile without hardcoding secrets in Git, logs, or Terraform state.
 
 ---
 
@@ -60,16 +62,14 @@ The diagram below shows the optional AWS deployment design. The runnable local a
 
 | Service | Purpose & Functionality |
 | :--- | :--- |
-| **AWS Amplify** | Hosts, builds, and delivers the React-based frontend web application. |
-| **Amazon API Gateway** | Provides secure, managed REST API endpoints connecting frontend clients to backend Lambdas. |
-| **AWS Lambda** | Serverless compute executing `getRoutes`, `getAqiGrid`, `explainRoute`, `setAqi`, and `refreshAqi`. |
-| **Amazon DynamoDB** | Low-latency NoSQL database storing AQI grid tiles, traffic metrics, and cached path data. |
-| **OpenFreeMap, Photon, Valhalla** | Keyless local map tiles, place search, and pedestrian/cyclist route calculation. |
-| **Amazon Location Service** | Optional provider for an AWS-hosted deployment. |
-| **Amazon Bedrock** | Generative AI foundation models generating route health insights and plain-language comparisons. |
-| **Amazon EventBridge** | Automated cron scheduler triggering `refreshAqi` on an hourly cadence. |
-| **Amazon CloudWatch** | Aggregates application logs, performance metrics, and operational alarms. |
-| **AWS IAM** | Enforces least-privilege security policies and service roles across all AWS resources. |
+| **Amazon EC2 (`t3.micro`)** | Cost-effective compute hosting the Nginx reverse proxy and Node.js backend service. |
+| **AWS Systems Manager (SSM)** | Parameter Store securely isolates the Gemini API key as a `SecureString` with least-privilege IAM access. |
+| **AWS IAM** | Role and instance profile policies (`breatheroute_app_policy`) granting EC2 read-only access to SSM parameters and DynamoDB. |
+| **Amazon DynamoDB** | Stores the 625-cell Delhi air quality spatial grid in `breatheroute-aqi`. |
+| **Amazon API Gateway** | Managed HTTP API (`cyprd9viih`) providing serverless read access to the AQI grid. |
+| **Amazon EventBridge** | Automated cron scheduler triggering hourly AQI synchronization. |
+| **Terraform (IaC)** | Declarative infrastructure as code provisioning VPC security groups, IAM roles, and EC2 instances. |
+| **OpenFreeMap, Photon, Valhalla** | High-performance vector tiles, open geocoding, and multimodal routing engine. |
 
 ---
 
@@ -77,63 +77,79 @@ The diagram below shows the optional AWS deployment design. The runnable local a
 
 ```text
 BreatheRoute/
-├── frontend/        # React application (Vite, interactive map, health profile selector)
-├── route-engine/    # Route calculation, scoring engine, and Amazon Bedrock integration Lambda
-├── aqi-traffic/     # AQI grid data ingestion and traffic simulation Lambdas
-├── backend/         # Local Node.js API for routing, AQI estimates, and place search
-└── docs/            # Project documentation, architecture diagrams, and submission assets
+├── frontend/            # React + Vite application (MapLibre GL, health profiles, turn-by-turn UI)
+├── backend/             # Node.js API server (routing, AQI spatial cache, Aegis Gemini AI engine)
+├── terraform/           # Terraform configuration (EC2, IAM, Security Groups, User Data provisioning)
+├── route-engine/        # Route calculation & scoring engine Lambda functions
+├── aqi-traffic/         # AQI grid data ingestion and traffic simulation Lambdas
+└── docs/                # Architecture diagrams, design documentation, and submission assets
 ```
 
 ---
 
-## 6. How to Run
+## 6. How to Run Locally
 
-### Start the backend
+### Start the Backend
 
-```bash
-cd backend
-copy env.example .env
-npm run dev
-```
-
-This API uses Valhalla for walk/cycle routes and Photon for free place search. AQI/traffic values are clearly labeled deterministic estimates until a live data provider is connected.
-
-### Start the frontend
-
-1. In a second terminal, navigate to the frontend directory:
+1. Navigate to the `backend/` directory:
    ```bash
-   cd frontend
-   ```
-
-2. Install dependencies:
-   ```bash
+   cd backend
    npm install
    ```
 
-3. Copy `.env.example` to `.env.local`:
+2. Configure environment variables (optional, fallback AI engine works out-of-the-box):
+   ```bash
+   cp env.example .env
+   ```
+
+3. Start development server:
+   ```bash
+   npm run dev
+   ```
+
+### Start the Frontend
+
+1. In a second terminal, navigate to `frontend/`:
+   ```bash
+   cd frontend
+   npm install
+   ```
+
+2. Create `.env.local`:
    ```env
    VITE_API_URL=http://localhost:3001/api
    VITE_MAP_STYLE_URL=https://tiles.openfreemap.org/styles/liberty
    ```
 
-4. Start the development server:
+3. Start development server:
    ```bash
    npm run dev
    ```
 
 ---
 
-## 7. Data
+## 7. AWS Deployment (Terraform)
 
-- **City-Level AQI**: Real-time environmental monitoring station feeds.
-- **Street-Level AQI & Traffic**: Modeled spatial interpolation accounting for traffic density, arterial corridors, and urban microclimates.
+Deploying BreatheRoute to AWS requires authenticated AWS CLI credentials in `us-east-1`:
+
+```bash
+cd terraform
+terraform init
+terraform plan
+terraform apply
+```
+
+The Terraform plan provisions:
+- Security Group allowing HTTP (`80`) and HTTPS (`443`) traffic.
+- IAM Instance Profile with least-privilege access for SSM Parameter Store and DynamoDB reading.
+- EC2 `t3.micro` instance running Ubuntu 24.04 with automated cloud-init provisioning (Node.js 22 LTS, Nginx, Git, swap space).
 
 ---
 
 ## 8. AI Tools Used
 
-- **Antigravity (Google DeepMind)**: Assisted in rapid prototyping, full-stack architectural design, and codebase implementation.
-- **Amazon Bedrock**: Generates conversational route explanations, health warnings, and personalized safety tips.
+- **Antigravity (Google DeepMind)**: Full-stack agentic pair programming, cloud infrastructure automation, and automated validation.
+- **Google Gemini API (`gemini-3.5-flash` / `gemini-3.5-flash-lite`)**: Generates real-time conversational route evaluations, respiratory health advisories, and comparative risk matrices.
 
 ---
 
