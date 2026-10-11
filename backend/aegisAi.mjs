@@ -59,53 +59,48 @@ ${JSON.stringify(routesSummary, null, 2)}
   if (apiKey && apiKey.trim() !== '') {
     try {
       console.log('Consulting live Google Gemini AI with Aegis Route prompt...');
-      const model = (process.env.GEMINI_MODEL || 'gemini-2.5-flash').trim();
-      let url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey.trim()}`;
+      const preferredModel = (process.env.GEMINI_MODEL || 'gemini-2.5-flash').trim();
+      const candidateModels = Array.from(new Set([preferredModel, 'gemini-2.5-flash-lite', 'gemini-flash-latest']));
 
-      let response = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [
-            {
-              role: 'user',
-              parts: [
-                { text: `${AEGIS_SYSTEM_PROMPT}\n\n${userContextPrompt}` }
-              ]
+      for (const model of candidateModels) {
+        try {
+          const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey.trim()}`;
+          const response = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contents: [
+                {
+                  role: 'user',
+                  parts: [
+                    { text: `${AEGIS_SYSTEM_PROMPT}\n\n${userContextPrompt}` }
+                  ]
+                }
+              ],
+              generationConfig: {
+                temperature: 0.2,
+                maxOutputTokens: 1200,
+              }
+            }),
+            signal: AbortSignal.timeout(15000),
+          });
+
+          if (response.ok) {
+            const data = await response.json();
+            const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+            if (text) {
+              console.log(`Live Gemini AI (${model}) route analysis completed successfully!`);
+              const parsed = parseAegisAiResponse(text, routes);
+              parsed.modelUsed = model;
+              return parsed;
             }
-          ],
-          generationConfig: {
-            temperature: 0.2,
-            maxOutputTokens: 1200,
+          } else {
+            const errText = await response.text();
+            console.warn(`Gemini model ${model} returned ${response.status}:`, errText);
           }
-        }),
-        signal: AbortSignal.timeout(15000),
-      });
-
-      // Fallback model if the specified model is not found
-      if (response.status === 404 && model !== 'gemini-flash-latest') {
-        const fallbackUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${apiKey.trim()}`;
-        response = await fetch(fallbackUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{ role: 'user', parts: [{ text: `${AEGIS_SYSTEM_PROMPT}\n\n${userContextPrompt}` }] }],
-            generationConfig: { temperature: 0.2, maxOutputTokens: 1200 }
-          }),
-          signal: AbortSignal.timeout(15000),
-        });
-      }
-
-      if (response.ok) {
-        const data = await response.json();
-        const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-        if (text) {
-          console.log('Live Gemini AI route analysis completed successfully!');
-          return parseAegisAiResponse(text, routes);
+        } catch (mErr) {
+          console.warn(`Error invoking Gemini model ${model}:`, mErr.message);
         }
-      } else {
-        const errText = await response.text();
-        console.error('Gemini API request failed:', response.status, errText);
       }
     } catch (err) {
       console.error('Error invoking Gemini AI:', err.message);
