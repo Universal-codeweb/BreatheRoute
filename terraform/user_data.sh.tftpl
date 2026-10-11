@@ -1,0 +1,134 @@
+#!/usr/bin/env bash
+set -euxo pipefail
+
+# 1. Create a 2GB swap space to ensure npm build succeeds smoothly on t3.micro
+if ! grep -q '/swapfile' /etc/fstab; then
+  fallocate -l 2G /swapfile || dd if=/dev/zero of=/swapfile bs=1M count=2048
+  chmod 600 /swapfile
+  mkswap /swapfile
+  swapon /swapfile
+  echo '/swapfile none swap sw 0 0' >> /etc/fstab
+fi
+
+# 2. Update packages and install prerequisites
+export DEBIAN_FRONTEND=noninteractive
+apt-get update -y
+apt-get install -y curl git nginx ca-certificates gnupg awscli
+
+# 3. Install Node.js 22 LTS via NodeSource
+if ! command -v node >/dev/null 2>&1; then
+  mkdir -p /etc/apt/keyrings
+  curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg
+  NODE_MAJOR=22
+  echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_$${NODE_MAJOR}.x nodistro main" | tee /etc/apt/sources.list.d/nodesource.list
+  apt-get update -y
+  apt-get install -y nodejs
+fi
+
+# 4. Clone or update repository
+APP_DIR="/opt/breatheroute"
+if [ ! -d "$${APP_DIR}" ]; then
+  git clone -b "${git_branch}" "${git_repo_url}" "$${APP_DIR}"
+else
+  cd "$${APP_DIR}"
+  git fetch origin
+  git checkout "${git_branch}"
+  git pull origin "${git_branch}"
+fi
+
+# 5. Build frontend with VITE_API_URL=/api
+cd "$${APP_DIR}/frontend"
+npm install --legacy-peer-deps
+VITE_API_URL=/api npm run build
+
+# Deploy frontend static files to Nginx web root
+mkdir -p /var/www/breatheroute
+cp -r "$${APP_DIR}/frontend/dist/"* /var/www/breatheroute/
+chown -R www-data:www-data /var/www/breatheroute
+chmod -R 755 /var/www/breatheroute
+
+# 6. Configure Nginx reverse proxy
+cat <<'NGINX_CONF' > /etc/nginx/sites-available/breatheroute
+server {
+    listen 80 default_server;
+    listen [::]:80 default_server;
+
+    server_name _;
+    root /var/www/breatheroute;
+    index index.html;
+
+    gzip on;
+    gzip_types text/plain text/css application/json application/javascript text/xml application/xml application/xml+rss text/javascript;
+
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+
+    location /api/ {
+        proxy_pass http://127.0.0.1:3001/api/;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_cache_bypass $http_upgrade;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location = /api {
+        return 301 /api/;
+    }
+}
+NGINX_CONF
+
+rm -f /etc/nginx/sites-enabled/default
+ln -sf /etc/nginx/sites-available/breatheroute /etc/nginx/sites-enabled/breatheroute
+nginx -t
+systemctl restart nginx
+systemctl enable nginx
+
+# 7. Install backend dependencies and setup persistent systemd service
+cd "$${APP_DIR}/backend"
+npm install --legacy-peer-deps
+
+# Fetch Gemini API Key securely from AWS SSM Parameter Store if configured
+GEMINI_KEY=$(aws ssm get-parameter --name "/breatheroute/gemini_api_key" --with-decryption --region "${aws_region}" --query "Parameter.Value" --output text 2>/dev/null || echo "")
+if [ -n "$$GEMINI_KEY" ] && [ "$$GEMINI_KEY" != "None" ]; then
+  cat <<ENV_EOF > "$${APP_DIR}/backend/.env"
+PORT=3001
+CORS_ORIGIN=*
+GEMINI_API_KEY=$$GEMINI_KEY
+GEMINI_MODEL=gemini-1.5-flash
+EXISTING_AQI_API_URL=https://cyprd9viih.execute-api.us-east-1.amazonaws.com/aqi
+ENV_EOF
+  chmod 600 "$${APP_DIR}/backend/.env"
+  chown ubuntu:ubuntu "$${APP_DIR}/backend/.env"
+fi
+
+cat <<'SERVICE' > /etc/systemd/system/breatheroute-backend.service
+[Unit]
+Description=BreatheRoute Node.js Backend Service
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/opt/breatheroute/backend
+ExecStart=/usr/bin/node server.mjs
+Restart=always
+RestartSec=5
+Environment=NODE_ENV=production
+Environment=PORT=3001
+Environment=CORS_ORIGIN=*
+Environment=AWS_REGION=${aws_region}
+Environment=EXISTING_AQI_API_URL=https://cyprd9viih.execute-api.us-east-1.amazonaws.com/aqi
+
+[Install]
+WantedBy=multi-user.target
+SERVICE
+
+chown -R ubuntu:ubuntu "$${APP_DIR}"
+systemctl daemon-reload
+systemctl enable breatheroute-backend
+systemctl restart breatheroute-backend

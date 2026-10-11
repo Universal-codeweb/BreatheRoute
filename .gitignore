@@ -1,6 +1,20 @@
-﻿node_modules/
+node_modules/
 .env
 .env.*
 dist/
 .DS_Store
 *.zip
+
+# Terraform
+**/.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraformrc
+terraform.rc
+terraform.tfvars
+terraform.tfvars.json
