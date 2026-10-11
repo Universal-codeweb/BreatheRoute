@@ -59,8 +59,8 @@ ${JSON.stringify(routesSummary, null, 2)}
   if (apiKey && apiKey.trim() !== '') {
     try {
       console.log('Consulting live Google Gemini AI with Aegis Route prompt...');
-      const preferredModel = (process.env.GEMINI_MODEL || 'gemini-2.5-flash').trim();
-      const candidateModels = Array.from(new Set([preferredModel, 'gemini-2.5-flash-lite', 'gemini-flash-latest']));
+      const preferredModel = (process.env.GEMINI_MODEL || 'gemini-3.5-flash').trim();
+      const candidateModels = Array.from(new Set([preferredModel, 'gemini-3.5-flash', 'gemini-3.5-flash-lite', 'gemini-3.7-flash']));
 
       for (const model of candidateModels) {
         try {
